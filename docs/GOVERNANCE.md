@@ -173,8 +173,8 @@ Unlike CLI mode (which uses `start-dev.sh` with Bun dev server), extension devel
 ### Settings Locations
 
 User settings for testing escape hatches:
-- `openchamber.subagents.editable: true` (if UI toggle implemented)  
-- Or env var: `OPENCODE_SUBAGENTS_EDITABLE=true` before starting VSCode  
+- Settings UI: `OpenChamber` > `Features` > `Editable Subagents` toggle (checkbox)
+- Settings JSON: `openchamber.subagents.editable: true` in user or workspace settings  
 
 Extension debug output shows in VSCode Developer Tools (Help → Toggle Developer Tools → Console).
 
