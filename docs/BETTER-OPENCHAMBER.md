@@ -96,6 +96,54 @@ See **[spec/08-subagent-read-only-feature-flag.md]** — renamed from `08-...` t
 
 ---
 
+## New in v1.11.x: Editable Subagents
+
+OpenChamber v1.11.1 introduced read-only subagent sessions to preserve reference material, but this changed the expected behavior for many users. The `better-openchamber` fork adds control back via the `subagents.editable` feature flag.
+
+### What is a Subagent?
+
+A **subagent** (also called a **"subtask"**) is a spun-off session created when you click "Open Session" on a chat message from a subagent suggestion. These appear as separate tabs in the Context Panel, allowing you to continue specific threads without cluttering the main conversation.
+
+### Changed Default Behavior (v1.11.2+)
+
+**Important:** Starting with v1.11.2-better, subagents are **editable by default**. If you upgraded from v1.11.2 and notice you can suddenly type in subagent chats that were previously frozen, this is the cause — the default changed from `readOnly: true` to editable via `subagents.editable`.
+
+### Enabling Editable Subagents
+
+**Option 1: Settings UI (Recommended)**
+
+The easiest way is through VS Code Settings:
+1. Open Command Palette (⌘/Ctrl+Shift+P) → **"OpenChamber: Open Settings"**
+2. Find **"Editable Subagents"** checkbox under OpenChamber settings
+3. Check the box to enable typing in subagent chats
+
+**Option 2: VS Code settings.json**
+
+Add this to your workspace or user settings (`.vscode/settings.json` or `settings.json`):
+
+```json
+{
+  "opencode.subagents.editable": true
+}
+```
+
+**Option 3: Environment Variable** (Dev/CI)
+
+For local development or CI environments, set the environment variable before launching VS Code:
+
+```bash
+export OPENCODE_SUBAGENTS_EDITABLE=true
+code .
+```
+
+*Note: Requires VS Code restart to take effect.*
+
+### Why This Matters
+
+Without this feature flag, subagent sessions opened from the Context Panel are read-only (v1.11.1 behavior). With `subagents.editable` enabled, you can type directly in those spun-off sessions while still preserving the safety of parent session references.
+
+---
+
 ## Comparison with better-opencode
 
 | Aspect | better-opencode | better-openchamber |

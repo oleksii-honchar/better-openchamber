@@ -1461,7 +1461,7 @@ export const settingsDict = {
   'settings.openchamber.visual.field.persistDraftMessages': 'Persist Draft Messages',
   'settings.openchamber.visual.field.editableSubagentsAria': 'Editable Subagents',
   'settings.openchamber.visual.field.editableSubagents': 'Editable Subagents',
-  'settings.openchamber.visual.field.editableSubagentsTooltip': 'Only the last subagent tab can be edited (subtask).',
+  'settings.openchamber.visual.field.editableSubagentsTooltip': 'Only the last subagent tab can be edited (subtask). Changes do not sync back to the parent session.',
   'settings.openchamber.visual.field.enableSpellcheckInTextInputsAria': 'Enable spellcheck in text inputs',
   'settings.openchamber.visual.field.enableSpellcheckInTextInputs': 'Enable Spellcheck in Text Inputs',
   'settings.openchamber.visual.field.sendAnonymousUsageReportsAria': 'Send anonymous usage reports',

@@ -26,6 +26,7 @@ import { updateDesktopSettings } from '@/lib/persistence';
 import { CODE_FONT_OPTIONS, DEFAULT_MONO_FONT, DEFAULT_UI_FONT, UI_FONT_OPTIONS, type MonoFontOption, type UiFontOption } from '@/lib/fontOptions';
 import { useI18n, type Locale } from '@/lib/i18n';
 import { useConfigStore } from '@/stores/useConfigStore';
+import { useFeatureFlagsStore } from '@/stores/useFeatureFlagsStore';
 import { normalizeMobileKeyboardMode, supportsMobileKeyboardResizeContent, type MobileKeyboardMode } from '@/lib/mobileKeyboardMode';
 import {
     setDirectoryShowHidden,
@@ -234,7 +235,7 @@ const normalizeUserMessageRenderingMode = (mode: unknown): 'markdown' | 'plain' 
     return mode === 'markdown' ? 'markdown' : 'plain';
 };
 
-export type VisibleSetting = 'theme' | 'pwaInstallName' | 'pwaOrientation' | 'mobileKeyboardMode' | 'timeFormat' | 'weekStart' | 'fontSize' | 'terminalFontSize' | 'spacing' | 'inputBarOffset' | 'mermaidRendering' | 'userMessageRendering' | 'chatRenderMode' | 'messageTransport' | 'activityRenderMode' | 'stickyUserHeader' | 'wideChatLayout' | 'splitAssistantMessageActions' | 'diffLayout' | 'mobileStatusBar' | 'dotfiles' | 'reasoning' | 'showToolFileIcons' | 'expandedTools' | 'queueMode' | 'terminalQuickKeys' | 'persistDraft' | 'inputSpellcheck' | 'reportUsage';
+export type VisibleSetting = 'theme' | 'pwaInstallName' | 'pwaOrientation' | 'mobileKeyboardMode' | 'timeFormat' | 'weekStart' | 'fontSize' | 'terminalFontSize' | 'spacing' | 'inputBarOffset' | 'mermaidRendering' | 'userMessageRendering' | 'chatRenderMode' | 'messageTransport' | 'activityRenderMode' | 'stickyUserHeader' | 'wideChatLayout' | 'splitAssistantMessageActions' | 'diffLayout' | 'mobileStatusBar' | 'dotfiles' | 'reasoning' | 'showToolFileIcons' | 'expandedTools' | 'editableSubagents' | 'queueMode' | 'terminalQuickKeys' | 'persistDraft' | 'inputSpellcheck' | 'reportUsage';
 
 interface OpenChamberVisualSettingsProps {
     /** Which settings to show. If undefined, shows all. */
@@ -296,6 +297,8 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
     const setShowExpandedBashTools = useUIStore(state => state.setShowExpandedBashTools);
     const showExpandedEditTools = useUIStore(state => state.showExpandedEditTools);
     const setShowExpandedEditTools = useUIStore(state => state.setShowExpandedEditTools);
+    const editableSubagents = useFeatureFlagsStore(state => state.editableSubagents);
+    const setEditableSubAgents = useFeatureFlagsStore(state => state.setEditableSubAgents);
     const timeFormatPreference = useUIStore(state => state.timeFormatPreference);
     const setTimeFormatPreference = useUIStore(state => state.setTimeFormatPreference);
     const weekStartPreference = useUIStore(state => state.weekStartPreference);
@@ -385,6 +388,11 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
         setStickyUserHeader(enabled);
         void updateDesktopSettings({ stickyUserHeader: enabled });
     }, [setStickyUserHeader]);
+
+    const handleEditableSubagentsChange = React.useCallback((enabled: boolean) => {
+        setEditableSubAgents(enabled);
+        void updateDesktopSettings({ subagentsEditable: enabled });
+    }, [setEditableSubAgents]);
 
     const handleWideChatLayoutChange = React.useCallback((enabled: boolean) => {
         setWideChatLayoutEnabled(enabled);
@@ -1784,6 +1792,39 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                             <span className="typography-ui-label text-foreground">{t('settings.openchamber.visual.field.persistDraftMessages')}</span>
                                         </div>
                                     )}
+
+                                     {shouldShow('editableSubagents') && (
+                                         <div
+                                             className="group flex cursor-pointer items-center gap-2 py-0.5"
+                                             role="button"
+                                             tabIndex={0}
+                                             aria-pressed={editableSubagents}
+                                             onClick={() => handleEditableSubagentsChange(!editableSubagents)}
+                                             onKeyDown={(event) => {
+                                                 if (event.key === ' ' || event.key === 'Enter') {
+                                                     event.preventDefault();
+                                                     handleEditableSubagentsChange(!editableSubagents);
+                                                 }
+                                             }}
+                                         >
+                                             <Checkbox
+                                                 checked={editableSubagents}
+                                                 onChange={handleEditableSubagentsChange}
+                                                 ariaLabel={t('settings.openchamber.visual.field.editableSubagentsAria')}
+                                             />
+                                             <div className="flex min-w-0 items-center gap-1.5">
+                                                 <span className="typography-ui-label text-foreground">{t('settings.openchamber.visual.field.editableSubagents')}</span>
+                                                 <Tooltip>
+                                                     <TooltipTrigger asChild>
+                                                         <Icon name="information" className="h-3.5 w-3.5 cursor-help text-muted-foreground/60" />
+                                                     </TooltipTrigger>
+                                                     <TooltipContent sideOffset={8} className="max-w-xs">
+                                                         {t('settings.openchamber.visual.field.editableSubagentsTooltip')}
+                                                     </TooltipContent>
+                                                 </Tooltip>
+                                             </div>
+                                         </div>
+                                     )}
 
                                     {!isMobile && shouldShow('inputSpellcheck') && (
                                         <div
