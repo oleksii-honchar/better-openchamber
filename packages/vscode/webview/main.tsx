@@ -1,16 +1,13 @@
 import { createVSCodeAPIs } from './api';
 import { onCommand, onThemeChange, proxyApiRequest, proxySessionMessageRequest, sendBridgeMessage, startSseProxy, stopSseProxy } from './api/bridge';
 import { vscodeStreamPerfCount, vscodeStreamPerfMeasure, vscodeStreamPerfObserve } from './api/streamPerf';
-import { extractBodyBase64, extractBodyText, extractJsonBody, hasInitBody } from './requestBodyTransport';
 import type { RuntimeAPIs } from '@openchamber/ui/lib/api/types';
-import { opencodeClient } from '@openchamber/ui/lib/opencode/client';
 import {
   buildVSCodeThemeFromPalette,
   readVSCodeThemePalette,
   type VSCodeThemeKind,
   type VSCodeThemePayload,
 } from '@openchamber/ui/lib/theme/vscode/adapter';
-import { getBootstrapMessages, readStoredLocaleForBootstrap } from '@openchamber/ui/lib/i18n';
 import type { VSCodeActiveEditorFile } from '@/sync/input-store';
 
 type ConnectionStatus = 'connecting' | 'connected' | 'error' | 'disconnected';
@@ -24,7 +21,6 @@ declare global {
     __VSCODE_CONFIG__?: {
       apiUrl?: string;
       workspaceFolder: string;
-      workspaceFolders?: Array<{ name: string; path: string }>;
       theme: string;
       connectionStatus: string;
       cliAvailable?: boolean;
@@ -56,9 +52,6 @@ try {
 }
 
 window.__OPENCHAMBER_RUNTIME_APIS__ = createVSCodeAPIs();
-
-const bootstrapLocale = readStoredLocaleForBootstrap();
-const bootstrapMessages = getBootstrapMessages(bootstrapLocale);
 
 const bootstrapConnectionStatus = () => {
   const initialStatus = (window.__VSCODE_CONFIG__?.connectionStatus as ConnectionStatus | undefined) || 'connecting';
@@ -178,7 +171,7 @@ const maybeHideLoadingOverlay = () => {
 
   if (connectionStatus === 'connected') {
     if (bootstrapFailed) {
-      setLoadingStatusText(bootstrapMessages.initialDataLoadFailed, 'error');
+      setLoadingStatusText('OpenCode connected, but initial data load failed.', 'error');
       fadeOutLoadingScreen();
       return;
     }
@@ -188,26 +181,26 @@ const maybeHideLoadingOverlay = () => {
       return;
     }
 
-    // Still loading providers/agents — stay silent (the animated logo signals work).
-    setLoadingStatusText('');
+    const providersText = bootstrapProvidersReady ? '✓ Providers' : '… Providers';
+    const agentsText = bootstrapAgentsReady ? '✓ Agents' : '… Agents';
+    setLoadingStatusText(`Loading data (${providersText}, ${agentsText})…`);
     return;
   }
 
   if (connectionStatus === 'error') {
     const error = window.__OPENCHAMBER_CONNECTION__?.error;
-    setLoadingStatusText(error || bootstrapMessages.connectionError, 'error');
+    setLoadingStatusText(error || 'Connection error', 'error');
     fadeOutLoadingScreen();
     return;
   }
 
   if (connectionStatus === 'disconnected') {
-    setLoadingStatusText(bootstrapMessages.disconnected, 'error');
+    setLoadingStatusText('Disconnected', 'error');
     fadeOutLoadingScreen();
     return;
   }
 
-  // Connecting — no jargon; the animated logo conveys progress.
-  setLoadingStatusText('');
+  setLoadingStatusText('Starting OpenCode API…');
 };
 
 const applyInitialTheme = (theme: { metadata?: { variant?: string }; colors?: { surface?: { background?: string; foreground?: string } } }) => {
@@ -322,46 +315,13 @@ const headersToRecord = (headers: HeadersInit | undefined): Record<string, strin
   return result;
 };
 
-const getRequestHeaders = (input?: RequestInfo | URL, init?: RequestInit): Record<string, string> => {
-  const headersFromRequest = input instanceof Request ? headersToRecord(input.headers) : {};
-  const headersFromInit = headersToRecord(init?.headers);
-  return { ...headersFromRequest, ...headersFromInit };
-};
-
-const getRequestDirectoryHint = (url: URL, input?: RequestInfo | URL, init?: RequestInit): string | undefined => {
-  const queryDirectory = url.searchParams.get('directory') || undefined;
-  if (queryDirectory) return queryDirectory;
-  const headers = getRequestHeaders(input, init);
-  for (const [key, value] of Object.entries(headers)) {
-    if (key.toLowerCase() === 'x-opencode-directory') return value;
-  }
-  return undefined;
-};
-
-const decodeBase64 = (value: string): ArrayBuffer => {
+const decodeBase64 = (value: string): Uint8Array => {
   const binary = atob(value);
-  const buffer = new ArrayBuffer(binary.length);
-  const bytes = new Uint8Array(buffer);
+  const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) {
     bytes[i] = binary.charCodeAt(i);
   }
-  return buffer;
-};
-
-const jsonResponse = (body: unknown, status = 200): Response => {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-};
-
-const unsupportedWebRouteResponse = (feature: string): Response => {
-  return jsonResponse({ error: `${feature} is not supported in VS Code` }, 501);
-};
-
-const pluginConfigErrorStatus = (message: string): number => {
-  const lower = message.toLowerCase();
-  if (lower.includes('already exists')) return 409;
-  if (lower.includes('not found')) return 404;
-  if (lower.includes('required') || lower.includes('invalid') || lower.includes('must ')) return 400;
-  return 500;
+  return bytes;
 };
 
 const isNullBodyStatus = (status: number): boolean => status === 204 || status === 205 || status === 304;
@@ -377,40 +337,84 @@ const buildProxiedResponse = (
     return new Response(proxied.bodyText, { status: proxied.status, headers: proxied.headers });
   }
 
-  const body = proxied.bodyBase64 ? decodeBase64(proxied.bodyBase64) : new ArrayBuffer(0);
+  const body = proxied.bodyBase64 ? decodeBase64(proxied.bodyBase64) : new Uint8Array();
   return new Response(body, { status: proxied.status, headers: proxied.headers });
+};
+
+const encodeBase64 = (bytes: Uint8Array): string => {
+  const CHUNK = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+};
+
+const extractBodyBase64 = async (input: RequestInfo | URL, init: RequestInit | undefined, method: string): Promise<string | undefined> => {
+  if (method === 'GET' || method === 'HEAD') return undefined;
+
+  if (input instanceof Request) {
+    const cloned = input.clone();
+    const buffer = await cloned.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    return bytes.length > 0 ? encodeBase64(bytes) : undefined;
+  }
+
+  const body = init?.body;
+  if (!body) return undefined;
+
+  if (typeof body === 'string') {
+    return encodeBase64(new TextEncoder().encode(body));
+  }
+
+  if (body instanceof URLSearchParams) {
+    return encodeBase64(new TextEncoder().encode(body.toString()));
+  }
+
+  if (body instanceof Blob) {
+    const buffer = await body.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    return bytes.length > 0 ? encodeBase64(bytes) : undefined;
+  }
+
+  console.warn('[OpenChamber] Unsupported request body type for proxy request:', body);
+  return undefined;
+};
+
+const extractBodyText = async (input: RequestInfo | URL, init: RequestInit | undefined, method: string): Promise<string> => {
+  if (method === 'GET' || method === 'HEAD') return '';
+
+  if (input instanceof Request) {
+    const cloned = input.clone();
+    return await cloned.text();
+  }
+
+  const body = init?.body;
+  if (!body) return '';
+
+  if (typeof body === 'string') {
+    return body;
+  }
+
+  if (body instanceof URLSearchParams) {
+    return body.toString();
+  }
+
+  if (body instanceof Blob) {
+    return await body.text();
+  }
+
+  console.warn('[OpenChamber] Unsupported request body type for direct session proxy:', body);
+  return '';
 };
 
 const isSseApiPath = (pathname: string) => pathname === '/api/event' || pathname === '/api/global/event';
 const isSessionMessageApiPath = (pathname: string) => /^\/api\/session\/[^/]+\/message$/.test(pathname);
-const isApiPath = (pathname: string) => pathname === '/api' || pathname.startsWith('/api/');
-const isLocalRuntimePath = (pathname: string) => isApiPath(pathname) || pathname === '/auth/session';
 
-const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: RequestInit | undefined, method: string) => {
+const handleLocalApiRequest = async (url: URL, init?: RequestInit) => {
   const pathname = url.pathname;
   const normalizedPathname = pathname !== '/' ? pathname.replace(/\/+$/, '') : pathname;
-
-  if (normalizedPathname === '/api/system/info' && method === 'GET') {
-    const config = window.__VSCODE_CONFIG__;
-    return jsonResponse({
-      openchamberVersion: config?.extensionVersion || 'VS Code Extension',
-      runtime: 'vscode',
-      platform: config?.platform || '',
-      arch: config?.arch || '',
-    });
-  }
-
-  if (normalizedPathname === '/api/preview/targets') {
-    return unsupportedWebRouteResponse('Preview proxy');
-  }
-
-  if (normalizedPathname.startsWith('/api/openchamber/tunnel/')) {
-    return unsupportedWebRouteResponse('Remote tunnel settings');
-  }
-
-  if (/^\/api\/projects\/[^/]+\/scheduled-tasks(?:\/[^/]+)?$/.test(normalizedPathname)) {
-    return unsupportedWebRouteResponse('Scheduled tasks');
-  }
+  const method = ((init?.method || 'GET') as string).toUpperCase();
 
   if (normalizedPathname === '/api/sessions/snapshot' && method === 'GET') {
     const activity = await sendBridgeMessage<Record<string, { type: 'idle' | 'busy' | 'cooldown' }>>('api:session-activity:get')
@@ -571,7 +575,7 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
   }
 
   if (pathname.startsWith('/api/fs/mkdir')) {
-    const body = await extractJsonBody(input, init, method);
+    const body = init?.body ? JSON.parse(init.body as string) : {};
     const data = await sendBridgeMessage('api:fs:mkdir', { path: body.path });
     return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
@@ -587,7 +591,7 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
   }
 
   if (pathname.startsWith('/api/vscode/drop-files') && method === 'POST') {
-    const body = await extractJsonBody(input, init, method);
+    const body = init?.body ? JSON.parse(init.body as string) : {};
     const uris = Array.isArray((body as { uris?: unknown[] }).uris)
       ? (body as { uris: unknown[] }).uris.filter((value): value is string => typeof value === 'string')
       : [];
@@ -596,7 +600,7 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
   }
 
   if (pathname.startsWith('/api/vscode/save-image') && method === 'POST') {
-    const body = await extractJsonBody(input, init, method);
+    const body = init?.body ? JSON.parse(init.body as string) : {};
     const fileName = typeof (body as { fileName?: unknown }).fileName === 'string'
       ? (body as { fileName: string }).fileName
       : undefined;
@@ -608,7 +612,7 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
   }
 
   if (pathname.startsWith('/api/vscode/save-markdown') && method === 'POST') {
-    const body = await extractJsonBody(input, init, method);
+    const body = init?.body ? JSON.parse(init.body as string) : {};
     const fileName = typeof (body as { fileName?: unknown }).fileName === 'string'
       ? (body as { fileName: string }).fileName
       : undefined;
@@ -622,9 +626,29 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
   if (pathname.startsWith('/api/config/agents/')) {
     const encodedName = pathname.slice('/api/config/agents/'.length);
     const name = decodeURIComponent(encodedName);
-    const verb = method;
-    const body = await extractJsonBody(input, init, method);
-    const directory = getRequestDirectoryHint(url, input, init);
+    const verb = ((init?.method || 'GET') as string).toUpperCase();
+    const body = init?.body ? JSON.parse(init.body as string) : {};
+    const queryDirectory = url.searchParams.get('directory') || undefined;
+    const headerDirectory = (() => {
+      const headers = init?.headers;
+      if (!headers) return undefined;
+      if (headers instanceof Headers) {
+        return headers.get('x-opencode-directory') || undefined;
+      }
+      if (Array.isArray(headers)) {
+        const found = headers.find(([key]) => key.toLowerCase() === 'x-opencode-directory');
+        return found?.[1] || undefined;
+      }
+      if (typeof headers === 'object') {
+        for (const [key, value] of Object.entries(headers)) {
+          if (key.toLowerCase() === 'x-opencode-directory' && typeof value === 'string') {
+            return value;
+          }
+        }
+      }
+      return undefined;
+    })();
+    const directory = queryDirectory || headerDirectory;
     try {
       const data = await sendBridgeMessage('api:config/agents', { method: verb, name, body, directory });
       return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -637,9 +661,29 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
   if (pathname.startsWith('/api/config/commands/')) {
     const encodedName = pathname.slice('/api/config/commands/'.length);
     const name = decodeURIComponent(encodedName);
-    const verb = method;
-    const body = await extractJsonBody(input, init, method);
-    const directory = getRequestDirectoryHint(url, input, init);
+    const verb = ((init?.method || 'GET') as string).toUpperCase();
+    const body = init?.body ? JSON.parse(init.body as string) : {};
+    const queryDirectory = url.searchParams.get('directory') || undefined;
+    const headerDirectory = (() => {
+      const headers = init?.headers;
+      if (!headers) return undefined;
+      if (headers instanceof Headers) {
+        return headers.get('x-opencode-directory') || undefined;
+      }
+      if (Array.isArray(headers)) {
+        const found = headers.find(([key]) => key.toLowerCase() === 'x-opencode-directory');
+        return found?.[1] || undefined;
+      }
+      if (typeof headers === 'object') {
+        for (const [key, value] of Object.entries(headers)) {
+          if (key.toLowerCase() === 'x-opencode-directory' && typeof value === 'string') {
+            return value;
+          }
+        }
+      }
+      return undefined;
+    })();
+    const directory = queryDirectory || headerDirectory;
     try {
       const data = await sendBridgeMessage('api:config/commands', { method: verb, name, body, directory });
       return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -650,9 +694,29 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
   }
 
   if (pathname === '/api/config/mcp') {
-    const verb = method;
-    const body = await extractJsonBody(input, init, method);
-    const directory = getRequestDirectoryHint(url, input, init);
+    const verb = ((init?.method || 'GET') as string).toUpperCase();
+    const body = init?.body ? JSON.parse(init.body as string) : {};
+    const queryDirectory = url.searchParams.get('directory') || undefined;
+    const headerDirectory = (() => {
+      const headers = init?.headers;
+      if (!headers) return undefined;
+      if (headers instanceof Headers) {
+        return headers.get('x-opencode-directory') || undefined;
+      }
+      if (Array.isArray(headers)) {
+        const found = headers.find(([key]) => key.toLowerCase() === 'x-opencode-directory');
+        return found?.[1] || undefined;
+      }
+      if (typeof headers === 'object') {
+        for (const [key, value] of Object.entries(headers)) {
+          if (key.toLowerCase() === 'x-opencode-directory' && typeof value === 'string') {
+            return value;
+          }
+        }
+      }
+      return undefined;
+    })();
+    const directory = queryDirectory || headerDirectory;
     try {
       const data = await sendBridgeMessage('api:config/mcp', { method: verb, body, directory });
       return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -665,51 +729,31 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
   if (pathname.startsWith('/api/config/mcp/')) {
     const encodedName = pathname.slice('/api/config/mcp/'.length);
     const name = decodeURIComponent(encodedName);
-    const verb = method;
-    const body = await extractJsonBody(input, init, method);
-    const directory = getRequestDirectoryHint(url, input, init);
+    const verb = ((init?.method || 'GET') as string).toUpperCase();
+    const body = init?.body ? JSON.parse(init.body as string) : {};
+    const queryDirectory = url.searchParams.get('directory') || undefined;
+    const headerDirectory = (() => {
+      const headers = init?.headers;
+      if (!headers) return undefined;
+      if (headers instanceof Headers) {
+        return headers.get('x-opencode-directory') || undefined;
+      }
+      if (Array.isArray(headers)) {
+        const found = headers.find(([key]) => key.toLowerCase() === 'x-opencode-directory');
+        return found?.[1] || undefined;
+      }
+      if (typeof headers === 'object') {
+        for (const [key, value] of Object.entries(headers)) {
+          if (key.toLowerCase() === 'x-opencode-directory' && typeof value === 'string') {
+            return value;
+          }
+        }
+      }
+      return undefined;
+    })();
+    const directory = queryDirectory || headerDirectory;
     try {
       const data = await sendBridgeMessage('api:config/mcp', { method: verb, name, body, directory });
-      return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return new Response(JSON.stringify({ error: message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-    }
-  }
-
-  if (pathname === '/api/config/snippets') {
-    const verb = method;
-    const directory = getRequestDirectoryHint(url, input, init);
-    try {
-      const data = await sendBridgeMessage('api:config/snippets', { method: verb, directory });
-      return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return new Response(JSON.stringify({ error: message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-    }
-  }
-
-  if (pathname === '/api/config/snippets/expand') {
-    const verb = method === 'GET' && !hasInitBody(init) && !(input instanceof Request) ? 'POST' : method;
-    const body = await extractJsonBody(input, init, method);
-    const directory = getRequestDirectoryHint(url, input, init);
-    try {
-      const data = await sendBridgeMessage('api:config/snippets', { method: verb, body, directory });
-      return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return new Response(JSON.stringify({ error: message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-    }
-  }
-
-  if (pathname.startsWith('/api/config/snippets/')) {
-    const encodedName = pathname.slice('/api/config/snippets/'.length);
-    const name = decodeURIComponent(encodedName);
-    const verb = method;
-    const body = await extractJsonBody(input, init, method);
-    const directory = getRequestDirectoryHint(url, input, init);
-    try {
-      const data = await sendBridgeMessage('api:config/snippets', { method: verb, name, body, directory });
       return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -722,8 +766,8 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
   if (skillsFilesMatch) {
     const name = decodeURIComponent(skillsFilesMatch[1]);
     const filePath = decodeURIComponent(skillsFilesMatch[2]);
-    const verb = method;
-    const body = await extractJsonBody(input, init, method);
+    const verb = ((init?.method || 'GET') as string).toUpperCase();
+    const body = init?.body ? JSON.parse(init.body as string) : {};
     try {
       const data = await sendBridgeMessage('api:config/skills/files', { 
         method: verb, 
@@ -764,7 +808,7 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
 
   // Skills scan: /api/config/skills/scan
   if (pathname === '/api/config/skills/scan') {
-    const body = await extractJsonBody(input, init, method);
+    const body = init?.body ? JSON.parse(init.body as string) : {};
     try {
       const data = await sendBridgeMessage('api:config/skills:scan', body);
       return new Response(JSON.stringify(data), { status: skillsCatalogStatusFromPayload(data), headers: { 'Content-Type': 'application/json' } });
@@ -776,7 +820,7 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
 
   // Skills install: /api/config/skills/install
   if (pathname === '/api/config/skills/install') {
-    const body = await extractJsonBody(input, init, method);
+    const body = init?.body ? JSON.parse(init.body as string) : {};
     try {
       const data = await sendBridgeMessage('api:config/skills:install', body);
       return new Response(JSON.stringify(data), { status: skillsCatalogStatusFromPayload(data), headers: { 'Content-Type': 'application/json' } });
@@ -800,8 +844,8 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
   if (pathname.startsWith('/api/config/skills/')) {
     const encodedName = pathname.slice('/api/config/skills/'.length);
     const name = decodeURIComponent(encodedName);
-    const verb = method;
-    const body = await extractJsonBody(input, init, method);
+    const verb = ((init?.method || 'GET') as string).toUpperCase();
+    const body = init?.body ? JSON.parse(init.body as string) : {};
     try {
       const data = await sendBridgeMessage('api:config/skills', { method: verb, name, body });
       return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -812,11 +856,11 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
   }
 
   if (pathname.startsWith('/api/config/settings')) {
-    if (method === 'GET') {
+    if ((init?.method || 'GET').toUpperCase() === 'GET') {
       const settings = await sendBridgeMessage('api:config/settings:get');
       return new Response(JSON.stringify(settings), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
-    const body = await extractJsonBody(input, init, method);
+    const body = init?.body ? JSON.parse(init.body as string) : {};
     const updated = await sendBridgeMessage('api:config/settings:save', body);
     return new Response(JSON.stringify(updated), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
@@ -827,7 +871,7 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
       return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     if (method === 'PUT') {
-      const body = await extractJsonBody(input, init, method);
+      const body = init?.body ? JSON.parse(init.body as string) : {};
       const data = await sendBridgeMessage('api:behavior/agents-md:save', body);
       return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -847,7 +891,7 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
   if (pathname.startsWith('/api/magic-prompts/')) {
     const id = decodeURIComponent(pathname.slice('/api/magic-prompts/'.length));
     if (method === 'PUT') {
-      const body = await extractJsonBody(input, init, method);
+      const body = init?.body ? JSON.parse(init.body as string) : {};
       const data = await sendBridgeMessage('api:magic-prompts:save', { id, text: body?.text });
       return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -872,98 +916,6 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
     return new Response(JSON.stringify({ restarted: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
 
-  if (pathname === '/api/config/plugins' && method === 'GET') {
-    try {
-      const directory = getRequestDirectoryHint(url, input, init);
-      const data = await sendBridgeMessage('api:config/plugins', { method, target: 'list', directory });
-      return jsonResponse(data);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return jsonResponse({ error: message }, pluginConfigErrorStatus(message));
-    }
-  }
-
-  if (pathname === '/api/config/plugins/registry' && method === 'GET') {
-    try {
-      const rawSpecs = url.searchParams.get('specs') || '';
-      const specs = rawSpecs ? rawSpecs.split(',').map((spec) => spec.trim()).filter(Boolean) : [];
-      const directory = getRequestDirectoryHint(url, input, init);
-      const data = await sendBridgeMessage('api:config/plugins', {
-        method,
-        target: 'registry',
-        specs,
-        refresh: url.searchParams.get('refresh') === 'true',
-        directory,
-      });
-      return jsonResponse(data);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return jsonResponse({ error: message }, pluginConfigErrorStatus(message));
-    }
-  }
-
-  if (pathname === '/api/config/plugins/entry' && method === 'POST') {
-    try {
-      const body = await extractJsonBody(input, init, method);
-      const directory = getRequestDirectoryHint(url, input, init);
-      const data = await sendBridgeMessage('api:config/plugins', { method, target: 'entry', body, directory });
-      return jsonResponse(data);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return jsonResponse({ error: message }, pluginConfigErrorStatus(message));
-    }
-  }
-
-  const pluginEntryMatch = pathname.match(/^\/api\/config\/plugins\/entry\/([^/]+)$/);
-  if (pluginEntryMatch) {
-    try {
-      const body = method === 'GET' || method === 'DELETE' ? undefined : await extractJsonBody(input, init, method);
-      const directory = getRequestDirectoryHint(url, input, init);
-      const data = await sendBridgeMessage('api:config/plugins', {
-        method,
-        target: 'entry',
-        pluginId: decodeURIComponent(pluginEntryMatch[1]),
-        body,
-        directory,
-      });
-      return jsonResponse(data);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return jsonResponse({ error: message }, pluginConfigErrorStatus(message));
-    }
-  }
-
-  if (pathname === '/api/config/plugins/file' && method === 'POST') {
-    try {
-      const body = await extractJsonBody(input, init, method);
-      const directory = getRequestDirectoryHint(url, input, init);
-      const data = await sendBridgeMessage('api:config/plugins', { method, target: 'file', body, directory });
-      return jsonResponse(data);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return jsonResponse({ error: message }, pluginConfigErrorStatus(message));
-    }
-  }
-
-  const pluginFileMatch = pathname.match(/^\/api\/config\/plugins\/file\/([^/]+)$/);
-  if (pluginFileMatch) {
-    try {
-      const body = method === 'GET' || method === 'DELETE' ? undefined : await extractJsonBody(input, init, method);
-      const directory = getRequestDirectoryHint(url, input, init);
-      const data = await sendBridgeMessage('api:config/plugins', {
-        method,
-        target: 'file',
-        pluginId: decodeURIComponent(pluginFileMatch[1]),
-        body,
-        directory,
-      });
-      return jsonResponse(data);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return jsonResponse({ error: message }, pluginConfigErrorStatus(message));
-    }
-  }
-
   if (pathname.startsWith('/api/openchamber/models-metadata')) {
     try {
       const data = await sendBridgeMessage('api:models/metadata');
@@ -972,24 +924,6 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
       console.warn('[OpenChamber] Failed to fetch models metadata via bridge, returning empty set:', error);
       return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
-  }
-
-  if (pathname === '/api/opencode/version' && method === 'GET') {
-    try {
-      const data = await sendBridgeMessage('api:opencode/version');
-      return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return new Response(JSON.stringify({ version: null, error: message }), { status: 502, headers: { 'Content-Type': 'application/json' } });
-    }
-  }
-
-  if (pathname === '/api/opencode/health' && method === 'GET') {
-    const connectionStatus = window.__OPENCHAMBER_CONNECTION__?.status;
-    return new Response(JSON.stringify({ healthy: connectionStatus === 'connected' }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
   }
 
   if (pathname === '/api/zen/models' && method === 'GET') {
@@ -1037,7 +971,7 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
   }
 
   if (pathname.startsWith('/api/opencode/directory')) {
-    const body = await extractJsonBody(input, init, method);
+    const body = init?.body ? JSON.parse(init.body as string) : {};
     const result = await sendBridgeMessage('api:opencode/directory', { path: body.path });
     return new Response(JSON.stringify(result), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
@@ -1053,7 +987,7 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
   }
 
   const quotaMatch = pathname.match(/^\/api\/quota\/([^/]+)$/);
-  if (quotaMatch && method === 'GET') {
+  if (quotaMatch && (init?.method || 'GET').toUpperCase() === 'GET') {
     const providerId = decodeURIComponent(quotaMatch[1]);
     try {
       const data = await sendBridgeMessage('api:quota:get', { providerId });
@@ -1066,7 +1000,7 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
 
   // Handle provider auth deletion: DELETE /api/provider/:providerId/auth
   const providerAuthMatch = pathname.match(/^\/api\/provider\/([^/]+)\/auth$/);
-  if (providerAuthMatch && method === 'DELETE') {
+  if (providerAuthMatch && (init?.method || 'GET').toUpperCase() === 'DELETE') {
     const providerId = decodeURIComponent(providerAuthMatch[1]);
     const scope = url.searchParams.get('scope') || 'auth';
     const queryDirectory = url.searchParams.get('directory') || undefined;
@@ -1081,7 +1015,7 @@ const handleLocalApiRequest = async (input: RequestInfo | URL, url: URL, init: R
 
   // Handle provider source lookup: GET /api/provider/:providerId/source
   const providerSourceMatch = pathname.match(/^\/api\/provider\/([^/]+)\/source$/);
-  if (providerSourceMatch && method === 'GET') {
+  if (providerSourceMatch && (init?.method || 'GET').toUpperCase() === 'GET') {
     const providerId = decodeURIComponent(providerSourceMatch[1]);
     const queryDirectory = url.searchParams.get('directory') || undefined;
     try {
@@ -1102,7 +1036,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const method = (init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
 
   const pathname = targetUrl?.pathname || '';
-  const normalizedPathname = pathname.replace(/\/{2,}/g, '/');
+  const normalizedPathname = pathname.replace(/\/+/, '/');
   if (targetUrl && normalizedPathname === '/health') {
     const connectionStatus = window.__OPENCHAMBER_CONNECTION__?.status;
     const isReady = connectionStatus === 'connected';
@@ -1117,16 +1051,12 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     });
   }
 
-  if (targetUrl && isLocalRuntimePath(normalizedPathname)) {
-    const localResponse = await handleLocalApiRequest(input, targetUrl, init, method);
+  if (targetUrl && targetUrl.pathname.startsWith('/api/')) {
+    const localResponse = await handleLocalApiRequest(targetUrl, init);
     if (localResponse) {
       recordBootstrapFetch(targetUrl.pathname, localResponse.ok);
       maybeHideLoadingOverlay();
       return localResponse;
-    }
-
-    if (!isApiPath(normalizedPathname)) {
-      return originalFetch(input as RequestInfo, init);
     }
 
     const suffixPath = `${targetUrl.pathname.replace(/^\/api/, '')}${targetUrl.search}`;
@@ -1205,8 +1135,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
 
     if (method === 'POST' && isSessionMessageApiPath(targetUrl.pathname)) {
       const bodyText = await extractBodyText(input, init, method);
-      const signal = (input instanceof Request ? input.signal : init?.signal) as AbortSignal | undefined;
-      const proxied = await proxySessionMessageRequest({ path: suffixPath, headers, bodyText, signal });
+      const proxied = await proxySessionMessageRequest({ path: suffixPath, headers, bodyText });
       const response = buildProxiedResponse(proxied);
       recordBootstrapFetch(targetUrl.pathname, response.ok);
       maybeHideLoadingOverlay();
@@ -1214,8 +1143,11 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     }
 
     const bodyBase64 = await extractBodyBase64(input, init, method);
-    const signal = (input instanceof Request ? input.signal : init?.signal) as AbortSignal | undefined;
-    const proxied = await proxyApiRequest({ method, path: suffixPath, headers, bodyBase64, signal });
+    if (method === 'POST' && (suffixPath.startsWith('/api/session') || suffixPath.startsWith('/api/sessions'))) {
+      const bodyPreview = typeof bodyBase64 === 'string' && bodyBase64.length < 500 ? bodyBase64 : bodyBase64?.slice(0, 500) + '...';
+      console.log('[Openchamber] Fetch intercept: session API request', { method, path: suffixPath, headers, body: bodyPreview });
+    }
+    const proxied = await proxyApiRequest({ method, path: suffixPath, headers, bodyBase64 });
     const response = buildProxiedResponse(proxied);
     recordBootstrapFetch(targetUrl.pathname, response.ok);
     maybeHideLoadingOverlay();
@@ -1339,55 +1271,12 @@ onCommand('createSessionWithPrompt', (payload) => {
   });
 });
 
-const normalizeWorkspaceFoldersPayload = (value: unknown): Array<{ name: string; path: string }> => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value
-    .map((entry) => {
-      const candidate = entry as { name?: unknown; path?: unknown };
-      const name = typeof candidate.name === 'string' ? candidate.name.trim() : '';
-      const path = typeof candidate.path === 'string' ? candidate.path.trim() : '';
-      return path ? { name, path } : null;
-    })
-    .filter((entry): entry is { name: string; path: string } => entry !== null);
-};
-
-const syncVSCodeWorkspaceProjects = async (
-  workspaceFolders: Array<{ name: string; path: string }>,
-  activePath?: string,
-) => {
-  if (window.__VSCODE_CONFIG__) {
-    window.__VSCODE_CONFIG__.workspaceFolders = workspaceFolders;
-  }
-  const { useProjectsStore } = await import('@/stores/useProjectsStore');
-  return useProjectsStore.getState().syncVSCodeWorkspaceFolders(workspaceFolders, activePath);
-};
-
-onCommand('workspaceFoldersChanged', (payload) => {
-  const record = payload as { workspaceFolders?: unknown } | undefined;
-  const workspaceFolders = normalizeWorkspaceFoldersPayload(record?.workspaceFolders);
-  void syncVSCodeWorkspaceProjects(workspaceFolders);
-});
-
 // Listen for newSession command from extension title bar button
-onCommand('newSession', (payload) => {
-  const record = payload as { directory?: unknown; workspaceFolders?: unknown } | undefined;
-  const directory = record?.directory;
-  const directoryOverride = typeof directory === 'string' && directory.trim().length > 0 ? directory.trim() : undefined;
-  const workspaceFolders = normalizeWorkspaceFoldersPayload(record?.workspaceFolders);
-
-  Promise.all([
-    import('@/sync/session-ui-store'),
-    syncVSCodeWorkspaceProjects(workspaceFolders, directoryOverride),
-  ]).then(([{ useSessionUIStore }, selectedProject]) => {
-    useSessionUIStore.getState().openNewSessionDraft(
-      directoryOverride
-        ? { directoryOverride, selectedProjectId: selectedProject?.id ?? undefined }
-        : undefined
-    );
+onCommand('newSession', () => {
+  import('@/sync/session-ui-store').then(({ useSessionUIStore }) => {
+    useSessionUIStore.getState().openNewSessionDraft();
   });
-
+  
   // Also dispatch event to navigate to chat view in VSCodeLayout
   window.dispatchEvent(new CustomEvent('openchamber:navigate', { detail: { view: 'chat' } }));
 });
@@ -1396,15 +1285,6 @@ onCommand('newSession', (payload) => {
 onCommand('showSettings', () => {
   // Dispatch event to navigate to settings view in VSCodeLayout
   window.dispatchEvent(new CustomEvent('openchamber:navigate', { detail: { view: 'settings' } }));
-});
-
-// Run the same full OpenCode reload flow the app uses after an update: shows the
-// reload overlay, restarts the managed OpenCode (via the bridge's /api/config/reload),
-// and refreshes config/data. Triggered by the "Restart API Connection" command.
-onCommand('reloadOpenCode', () => {
-  void import('@openchamber/ui/stores/useAgentsStore').then(({ reloadOpenCodeConfiguration }) => {
-    void reloadOpenCodeConfiguration().catch(() => undefined);
-  });
 });
 
 const getNotificationClaimKey = (payload: { title?: unknown; body?: unknown; sessionId?: unknown; tag?: unknown } | undefined): string => {
@@ -1579,7 +1459,14 @@ const fetchLastAssistantMessageText = async (sessionId: string, messageId?: stri
   if (!sessionId) return '';
 
   try {
-    const messages = await opencodeClient.getSessionMessages(sessionId, 5);
+    const response = await fetch(`/api/session/${encodeURIComponent(sessionId)}/message?limit=5`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!response.ok) return '';
+
+    const messages = await response.json().catch(() => null) as unknown;
     if (!Array.isArray(messages)) return '';
 
     let target = messageId

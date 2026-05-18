@@ -215,6 +215,11 @@
           "type": "string",
           "default": "",
           "description": "%configuration.opencodeBinary.description%"
+        },
+        "openchamber.apiPort": {
+          "type": "number",
+          "default": 3579,
+          "description": "%configuration.apiPort.description%"
         }
       }
     }

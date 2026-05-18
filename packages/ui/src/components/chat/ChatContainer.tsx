@@ -20,6 +20,7 @@ import { TimelineDialog } from './TimelineDialog';
 import { useChatTurnNavigation } from './hooks/useChatTurnNavigation';
 import { useChatSurfaceMode } from './useChatSurfaceMode';
 import { useDeviceInfo } from '@/lib/device';
+import { useFeatureFlag } from '@/lib/featureFlags';
 import { Button } from '@/components/ui/button';
 import { OverlayScrollbar } from '@/components/ui/OverlayScrollbar';
 import { Icon } from "@/components/icon/Icon";
@@ -593,7 +594,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ autoOpenDraft = tr
             {t('chat.container.returnToParent.label')}
         </Button>
     ) : null;
-    const promptReadOnly = readOnly || Boolean(parentSession);
+    // Allow editable subagents via Settings UI toggle or environment variable (Phase 2)
+    const allowEditableSubAgents = useFeatureFlag('subagents.editable', true);
+    const promptReadOnly = readOnly || (Boolean(parentSession) && !allowEditableSubAgents);
 
     React.useEffect(() => {
         if (autoOpenDraft && !currentSessionId && !draftOpen) {

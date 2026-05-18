@@ -7,7 +7,6 @@ import { getWebviewHtml } from './webviewHtml';
 import { openSseProxy } from './sseProxy';
 import { resolveWebviewDevServerUrl } from './webviewDevServer';
 import { normalizeWindowsDriveLetter } from './pathUtils';
-import { resolveWorkspaceFolders, type WorkspaceFolderCandidate } from './workspaceResolver';
 
 type ActiveEditorFilePayload = {
   filePath: string;
@@ -265,27 +264,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  public createNewSession(options?: { directory?: string; workspaceFolders?: WorkspaceFolderCandidate[] }) {
+  public createNewSession() {
     if (this._view) {
       // Reveal the webview panel
       this._view.show(true);
-
+      
       this._view.webview.postMessage({
         type: 'command',
-        command: 'newSession',
-        ...((options?.directory || options?.workspaceFolders?.length) && {
-          payload: { directory: options?.directory, workspaceFolders: options?.workspaceFolders ?? [] },
-        }),
+        command: 'newSession'
       });
     }
-  }
-
-  public syncWorkspaceFolders(workspaceFolders: WorkspaceFolderCandidate[]) {
-    this._view?.webview.postMessage({
-      type: 'command',
-      command: 'workspaceFoldersChanged',
-      payload: { workspaceFolders },
-    });
   }
 
   public showSettings() {
@@ -316,23 +304,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       command: 'settingsSynced',
       payload: settings,
     });
-  }
-
-  /**
-   * Ask the webview to run the full OpenCode reload flow (overlay + managed
-   * restart via the bridge + config/data refresh) — the same flow used after an
-   * OpenCode update. Returns false if no webview is resolved to drive it.
-   */
-  public reloadOpenCode(): boolean {
-    if (!this._view) {
-      return false;
-    }
-
-    this._view.webview.postMessage({
-      type: 'command',
-      command: 'reloadOpenCode',
-    });
-    return true;
   }
 
   public notifyWindowFocusChanged(focused: boolean): void {
@@ -608,7 +579,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const workspaceFolder = normalizeWindowsDriveLetter(
       vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || ''
     );
-    const workspaceFolders = resolveWorkspaceFolders(vscode.workspace.workspaceFolders ?? []);
+    const workspaceFolders = (vscode.workspace.workspaceFolders || []).map(
+      (folder) => normalizeWindowsDriveLetter(folder.uri.fsPath)
+    );
     // Use cached values which are updated by onStatusChange callback
     const initialStatus = this._cachedStatus;
     const cliAvailable = this._openCodeManager?.isCliAvailable() ?? false;
