@@ -7,6 +7,19 @@ declare global {
     __OPENCHAMBER_LOCAL_ORIGIN__?: string;
     __OPENCHAMBER_ELECTRON__?: { runtime?: string };
     __OPENCHAMBER_DESKTOP_BOOT_OUTCOME__?: DesktopBootOutcome;
+    __VSCODE_CONFIG__?: {
+      workspaceFolder?: string;
+      workspaceFolders?: string[];
+      theme?: string;
+      connectionStatus?: string;
+      cliAvailable?: boolean;
+      extensionVersion?: string;
+      platform?: string;
+      arch?: string;
+      panelType?: string;
+      viewMode?: string;
+      initialSessionId?: string | null;
+    };
   }
 
   interface WebviewElement extends HTMLElement {

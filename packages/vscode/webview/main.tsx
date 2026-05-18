@@ -1143,6 +1143,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     }
 
     const bodyBase64 = await extractBodyBase64(input, init, method);
+    if (method === 'POST' && (suffixPath.startsWith('/api/session') || suffixPath.startsWith('/api/sessions'))) {
+      const bodyPreview = typeof bodyBase64 === 'string' && bodyBase64.length < 500 ? bodyBase64 : bodyBase64?.slice(0, 500) + '...';
+      console.log('[Openchamber] Fetch intercept: session API request', { method, path: suffixPath, headers, body: bodyPreview });
+    }
     const proxied = await proxyApiRequest({ method, path: suffixPath, headers, bodyBase64 });
     const response = buildProxiedResponse(proxied);
     recordBootstrapFetch(targetUrl.pathname, response.ok);

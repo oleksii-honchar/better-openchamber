@@ -214,6 +214,11 @@
           "type": "string",
           "default": "",
           "description": "Optional absolute path to the opencode CLI binary. Useful if PATH lookup fails. Requires window reload or API restart to apply."
+        },
+        "openchamber.subagents.editable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow typing in subagent (subtask) chats. When disabled, subagents are read-only reference tabs."
         }
       }
     }

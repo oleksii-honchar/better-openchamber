@@ -23,6 +23,7 @@ import { SimpleMarkdownRenderer } from '../MarkdownRenderer';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useUIStore } from '@/stores/useUIStore';
 import { flattenAssistantTextParts, suggestPlanTitleFromText } from '@/lib/messages/messageText';
+import { useFeatureFlag } from '@/lib/featureFlags';
 import { MULTIRUN_EXECUTION_FORK_PROMPT_META_TEXT } from '@/lib/messages/executionMeta';
 import { useMessageTTS } from '@/hooks/useMessageTTS';
 import { useConfigStore } from '@/stores/useConfigStore';
@@ -161,11 +162,12 @@ const UserSubtaskPart: React.FC<{ part: SubtaskPartLike }> = ({ part }) => {
                                 return;
                             }
 
+                            const allowEditableSubAgents = useFeatureFlag('subagents.editable', true);
                             openContextPanelTab(effectiveDirectory, {
                                 mode: 'chat',
                                 dedupeKey: `session:${taskSessionID}`,
                                 label: description || agent || t('contextPanel.mode.chat'),
-                                readOnly: true,
+                                readOnly: !allowEditableSubAgents,
                             });
                         }}
                     >

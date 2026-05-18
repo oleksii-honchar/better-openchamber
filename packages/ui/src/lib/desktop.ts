@@ -177,6 +177,9 @@ export type DesktopSettings = {
   sttSilenceThresholdDb?: number;
   sttSilenceHoldMs?: number;
   sttTranscribeOnStop?: boolean;
+  
+  // Editable subagents feature flag (Phase 2: Settings UI toggle)
+  subagentsEditable?: boolean;
 };
 
 type TauriGlobal = {

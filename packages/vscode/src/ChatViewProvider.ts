@@ -579,6 +579,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const workspaceFolder = normalizeWindowsDriveLetter(
       vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || ''
     );
+    const workspaceFolders = (vscode.workspace.workspaceFolders || []).map(
+      (folder) => normalizeWindowsDriveLetter(folder.uri.fsPath)
+    );
     // Use cached values which are updated by onStatusChange callback
     const initialStatus = this._cachedStatus;
     const cliAvailable = this._openCodeManager?.isCliAvailable() ?? false;
@@ -587,6 +590,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       webview,
       extensionUri: this._extensionUri,
       workspaceFolder,
+      workspaceFolders,
       initialStatus,
       cliAvailable,
       extensionVersion: String(this._context.extension?.packageJSON?.version || ''),

@@ -8,6 +8,12 @@ interface UseProviderLogoReturn {
     hasLogo: boolean;
 }
 
+// Polyfill for Bun test environment which lacks Vite's import.meta.glob
+if (typeof import.meta.glob !== 'function') {
+  // @ts-ignore - Global polyfill for Bun tests
+  import.meta.glob = () => ({});
+}
+
 const localLogoModules = import.meta.glob<string>('../assets/provider-logos/*.svg', {
     eager: true,
     import: 'default',

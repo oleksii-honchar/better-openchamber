@@ -9,7 +9,8 @@
     "packages/*"
   ],
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.0.0",
+    "vscode": "^1.100.0"
   },
   "keywords": [
     "opencode",
