@@ -42,10 +42,23 @@ readOnly: !allowEditableSubagents,  // ← Toggleable instead of always true
 ### Configuration Options
 
 **Option A: Settings UI Toggle** (Planned)  
-Add checkbox in `Features` settings page: `Editable Subagents`
+### Implementation
 
-**Option B: Environment Variable** (MVP)  
-Set `OPENCODE_SUBAGENTS_EDITABLE=true` in workspace or user settings to enable immediately without code changes.
+A checkbox toggle in Settings UI (`Features` > `Editable Subagents`) allows users to opt-in to editable subagent chats:
+
+**Settings JSON** (manual):
+```jsonc
+{
+  "openchamber.subagents.editable": true
+}
+```
+
+When enabled, subagent sessions opened from parent session links are fully writable.
+
+### Files Modified
+
+1. `packages/ui/src/components/chat/ChatContainer.tsx` — Add feature flag check (~5 lines)  
+2. `packages/ui/src/lib/settings.ts` — Define schema and getter for Settings-based toggle
 
 ### Files Modified
 
