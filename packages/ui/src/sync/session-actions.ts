@@ -189,13 +189,16 @@ export async function createSession(
   title?: string,
   directoryOverride?: string | null,
   parentID?: string | null,
+  workspaceFolders?: string[] | null,
 ): Promise<Session | null> {
   try {
+    console.log('[Openchamber] SDK session.create:', { directory: directoryOverride ?? dir(), title, parentID, workspaceFolders })
     const result = await sdk().session.create({
       directory: directoryOverride ?? dir(),
       title,
       parentID: parentID ?? undefined,
-    })
+      ...(workspaceFolders ? { workspaceFolders } : {}),
+    } as Record<string, unknown>)
     const session = result.data
     if (!session) return null
 

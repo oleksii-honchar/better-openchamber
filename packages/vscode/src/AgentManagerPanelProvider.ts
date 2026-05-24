@@ -241,12 +241,16 @@ export class AgentManagerPanelProvider {
     const workspaceFolder = normalizeWindowsDriveLetter(
       vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || ''
     );
+    const workspaceFolders = (vscode.workspace.workspaceFolders || []).map(
+      (folder) => normalizeWindowsDriveLetter(folder.uri.fsPath)
+    );
     const cliAvailable = this._openCodeManager?.isCliAvailable() ?? false;
 
     return getWebviewHtml({
       webview,
       extensionUri: this._extensionUri,
       workspaceFolder,
+      workspaceFolders,
       initialStatus: this._cachedStatus,
       cliAvailable,
       panelType: 'agentManager',

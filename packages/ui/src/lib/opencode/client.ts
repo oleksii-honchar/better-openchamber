@@ -426,6 +426,12 @@ class OpencodeService {
   }
 
   async createSession(params?: { parentID?: string; title?: string }): Promise<Session> {
+    const requestParams = {
+      ...(this.currentDirectory ? { directory: this.currentDirectory } : {}),
+      parentID: params?.parentID,
+      title: params?.title
+    };
+    console.log('[Openchamber] OpencodeClient.createSession:', requestParams);
     const response = await this.client.session.create({
       ...(this.currentDirectory ? { directory: this.currentDirectory } : {}),
       parentID: params?.parentID,
