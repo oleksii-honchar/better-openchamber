@@ -197,7 +197,7 @@ export async function createSession(
       directory: directoryOverride ?? dir(),
       title,
       parentID: parentID ?? undefined,
-      ...(workspaceFolders ? { workspaceFolders } : {}),
+      ...(workspaceFolders ? { $body_workspaceFolders: workspaceFolders } : {}),
     } as Record<string, unknown>)
     const session = result.data
     if (!session) return null
