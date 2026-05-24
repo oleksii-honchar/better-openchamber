@@ -75,7 +75,35 @@ When enabled, subagent sessions opened from parent session links are fully writa
 
 ---
 
-## 2. On-Demand VSIX Build Script
+## 2. Multi-Root Workspace Folders (`workspaceFolders`)
+
+📋 [Detailed Spec](./spec/02-workspace-folders-multi-root.md)
+
+**Status:** ✅ Complete
+
+### Problem
+
+In multi-root VS Code workspaces, only the first workspace folder was visible to the server. The `workspaceFolders` array was never transmitted through the SDK — it was silently dropped by `buildClientParams` because `workspaceFolders` is not in the SDK v2's field definition for `Session2.create`. The server's `workspace_folders` DB column was always `null`.
+
+### Solution
+
+Wired `workspaceFolders` end-to-end:
+
+1. **VS Code extension** computes `workspaceFolders` array from `vscode.workspace.workspaceFolders` (with `normalizeWindowsDriveLetter`), injects into `__VSCODE_CONFIG__`
+2. **Openchamber UI** reads `workspaceFolders` from `__VSCODE_CONFIG__` and passes it to SDK with the `$body_` prefix workaround (`$body_workspaceFolders`) to bypass the SDK's field definition gap
+3. **Server** receives `workspaceFolders` in `CreateInput.body`, stores in DB, injects into `<env>` system prompt
+
+### Key Detail: `$body_` Prefix Workaround
+
+The SDK v2's `buildClientParams` silently drops unknown keys. Using `$body_workspaceFolders` forces the key into the request body because `$body_` is a recognized prefix (`$body_: "body"` in `params.gen.js`) that strips the prefix and places the value in `params.body`.
+
+### Files Modified
+
+7 files across `packages/vscode` and `packages/ui` — see [spec](./spec/02-workspace-folders-multi-root.md) for details.
+
+---
+
+## 3. On-Demand VSIX Build Script
 
 **Status:** ✅ Complete  
 
@@ -115,4 +143,4 @@ The fork structure mirrors `better-opencode/docs` for consistency, but focuses o
 
 ---
 
-**Last updated**: May 18, 2026 (v1.11.1 read-only freeze documented)
+**Last updated**: May 24, 2026 (workspaceFolders multi-root feature documented)
