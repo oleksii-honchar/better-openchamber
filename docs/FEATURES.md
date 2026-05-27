@@ -90,12 +90,14 @@ In multi-root VS Code workspaces, only the first workspace folder was visible to
 Wired `workspaceFolders` end-to-end:
 
 1. **VS Code extension** computes `workspaceFolders` array from `vscode.workspace.workspaceFolders` (with `normalizeWindowsDriveLetter`), injects into `__VSCODE_CONFIG__`
-2. **Openchamber UI** reads `workspaceFolders` from `__VSCODE_CONFIG__` and passes it to SDK with the `$body_` prefix workaround (`$body_workspaceFolders`) to bypass the SDK's field definition gap
+2. **Openchamber UI** reads `workspaceFolders` from `__VSCODE_CONFIG__` and passes it to SDK with the `$body_` prefix workaround (`$body_workspaceFolders`) to bypass the npm SDK v1.14.19's field definition gap (the local SDK has native support)
 3. **Server** receives `workspaceFolders` in `CreateInput.body`, stores in DB, injects into `<env>` system prompt
 
 ### Key Detail: `$body_` Prefix Workaround
 
-The SDK v2's `buildClientParams` silently drops unknown keys. Using `$body_workspaceFolders` forces the key into the request body because `$body_` is a recognized prefix (`$body_: "body"` in `params.gen.js`) that strips the prefix and places the value in `params.body`.
+The npm SDK v1.14.19's `buildClientParams` silently drops unknown keys. Using `$body_workspaceFolders` forces the key into the request body because `$body_` is a recognized prefix (`$body_: "body"` in `params.gen.js`) that strips the prefix and places the value in `params.body`. The `as Record<string, unknown>` type cast bypasses TypeScript checking (exacerbated by `skipLibCheck: true`).
+
+**Note:** The local SDK at `better-opencode/packages/sdk` has `workspaceFolders` as a native field (sdk.gen.ts:3101). The standalone app uses the native field directly. Only the OpenChamber extension's npm SDK dependency requires the workaround. The proper fix is to update the npm SDK to include `workspaceFolders` in the session create field definition.
 
 ### Files Modified
 

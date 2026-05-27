@@ -105,7 +105,9 @@ export async function createSession(
 }
 ```
 
-**Critical detail:** The `$body_` prefix is required because `workspaceFolders` is not in the SDK's `buildClientParams` field definition. The `$body_` prefix is recognized by `buildClientParams` (defined in `params.gen.js` as `$body_: "body"`), which strips the prefix and places the value in `params.body`. Without this prefix, the key is silently dropped.
+**Critical detail:** The `$body_` prefix is required because `workspaceFolders` is not in the npm SDK v1.14.19's `buildClientParams` field definition. The `$body_` prefix is recognized by `buildClientParams` (defined in `params.gen.js` as `$body_: "body"`), which strips the prefix and places the value in `params.body`. Without this prefix, the key is silently dropped.
+
+**Note:** The local SDK at `better-opencode/packages/sdk` has `workspaceFolders` as a native field (sdk.gen.ts:3101). Only the npm-published SDK requires the workaround.
 
 **`packages/ui/src/sync/session-ui-store.ts`:**
 - Updated `createSession` type signature to include `workspaceFolders` parameter
@@ -117,6 +119,7 @@ export async function createSession(
 
 - `workspaceFolder` (singular) is preserved alongside `workspaceFolders` (plural) for any existing consumers of `__VSCODE_CONFIG__.workspaceFolder`
 - `workspaceFolders` is only added to the SDK body if the array is non-empty: `...(workspaceFolders ? { $body_workspaceFolders: workspaceFolders } : {})`
+- The `$body_` prefix is a known limitation of the npm SDK v1.14.19 (local SDK has native support)
 
 ### Files Modified
 
@@ -124,7 +127,7 @@ export async function createSession(
 2. `packages/vscode/src/ChatViewProvider.ts` — Computes and passes `workspaceFolders` to `getWebviewHtml`
 3. `packages/vscode/src/AgentManagerPanelProvider.ts` — Computes and passes `workspaceFolders` to `getWebviewHtml`
 4. `packages/vscode/src/SessionEditorPanelProvider.ts` — Computes and passes `workspaceFolders` to `getWebviewHtml`
-5. `packages/ui/src/sync/session-actions.ts` — `createSession` accepts `workspaceFolders`, uses `$body_` prefix for SDK body
+5. `packages/ui/src/sync/session-actions.ts` — `createSession` accepts `workspaceFolders`, uses `$body_` prefix workaround for npm SDK (native field in local SDK)
 6. `packages/ui/src/sync/session-ui-store.ts` — `createSession` type + action updated; `sendMessage` and `createSessionFromAssistantMessage` read from `__VSCODE_CONFIG__`
 7. `packages/ui/src/types/desktop.d.ts` — Added `__VSCODE_CONFIG__` type declaration with `workspaceFolders`
 
@@ -140,13 +143,17 @@ After implementation, verify:
 
 ### SDK Limitation Note
 
-The SDK v2 types do not include `workspaceFolders` in `SessionCreateData.body`. The `as Record<string, unknown>` cast bypasses TypeScript checking. When the SDK is regenerated from the OpenAPI spec, the field definition for `Session2.create` will need to include:
+The **npm-published SDK v1.14.19** does not include `workspaceFolders` in `SessionCreateData.body` or in the `buildClientParams` field definition for `Session2.create`. The `as Record<string, unknown>` cast bypasses TypeScript checking (exacerbated by `skipLibCheck: true` in tsconfig). When the SDK is regenerated from the OpenAPI spec, the field definition for `Session2.create` will need to include:
 
 ```javascript
 { in: "body", key: "workspaceFolders" },
 ```
 
 Until then, the `$body_` prefix workaround is required. This is tracked as a known limitation.
+
+**Note:** The local SDK at `better-opencode/packages/sdk/js/src/v2/gen/sdk.gen.ts:3101` has `workspaceFolders` as a native field with `{ in: "body", key: "workspaceFolders" }`. The standalone app (`better-opencode/packages/app`) uses the native field directly. Only the OpenChamber extension's npm SDK dependency requires the workaround.
+
+**Investigation (2026-05-27):** Attempted to replace `$body_workspaceFolders` with native `workspaceFolders` in `session-actions.ts`. The build passed (due to `skipLibCheck: true`), but runtime analysis confirmed that the npm SDK's `buildClientParams` silently drops `workspaceFolders` because it's not in the field definition. The change was reverted. The proper fix is to update the npm SDK to include `workspaceFolders` in the session create field definition. See `~/.agent-sessions/26/05/25/260525-1244-auto-allow-workspace-folders/build-report.md`.
 
 ---
 
