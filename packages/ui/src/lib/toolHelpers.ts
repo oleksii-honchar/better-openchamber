@@ -213,6 +213,16 @@ export const TOOL_METADATA: Record<string, ToolMetadata> = {
       category: 'ai',
       outputLanguage: 'json',
       inputFields: []
+    },
+
+    invalid: {
+      displayName: 'Invalid',
+      category: 'system',
+      outputLanguage: 'text',
+      inputFields: [
+        { key: 'tool', label: 'Called Tool', type: 'text' },
+        { key: 'error', label: 'Error', type: 'text' },
+      ]
     }
   };
 

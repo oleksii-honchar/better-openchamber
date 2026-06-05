@@ -1821,6 +1821,28 @@ const ToolExpandedContent: React.FC<ToolExpandedContentProps> = React.memo(({
             return null;
         }
 
+        if (part.tool === 'invalid') {
+            const inputError = input?.error;
+            const inputTool = input?.tool;
+            return renderScrollableBlock(
+                <div className="space-y-2 p-2 rounded-xl" style={{
+                    backgroundColor: 'var(--status-error-background)',
+                    border: '1px solid var(--status-error-border)',
+                }}>
+                    {typeof inputTool === 'string' && inputTool.trim() ? (
+                        <div className="typography-meta font-medium" style={{ color: 'var(--status-error)' }}>
+                            Tool: {inputTool}
+                        </div>
+                    ) : null}
+                    {typeof inputError === 'string' && inputError.trim() ? (
+                        <div className="typography-meta" style={{ color: 'var(--status-error)' }}>
+                            {inputError}
+                        </div>
+                    ) : null}
+                </div>
+            );
+        }
+
         if (hasStringOutput && outputString.trim()) {
             return renderScrollableBlock(
                 <ToolScrollableTextOutput
