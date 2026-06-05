@@ -425,6 +425,19 @@ const getToolShortDescription = (activity: TurnActivityPart): string | null => {
         return getTodoSummaryFromActivity(activity);
     }
 
+    // For invalid tools, show which tool failed and why
+    if (toolName === 'invalid') {
+        const error = input?.error;
+        if (typeof error === 'string' && error.trim().length > 0) {
+            const calledTool = input?.tool;
+            const prefix = typeof calledTool === 'string' && calledTool.trim().length > 0
+                ? `${calledTool}: `
+                : '';
+            const text = prefix + error;
+            return text.length > 60 ? text.slice(0, 60) + '...' : text;
+        }
+    }
+
     // Fallback: try filename
     return getToolFileName(activity);
 };
@@ -730,6 +743,7 @@ const StaticToolRowInner: React.FC<{
         || normalizedToolName === 'glob';
     const isFetchGroup = normalizedToolName === 'webfetch' || normalizedToolName === 'fetch' || normalizedToolName === 'curl' || normalizedToolName === 'wget';
     const isSkillGroup = normalizedToolName === 'skill';
+    const isInvalidGroup = normalizedToolName === 'invalid';
 
     return (
         <div
@@ -744,7 +758,7 @@ const StaticToolRowInner: React.FC<{
                 active={hasRunningActivity}
                 minDurationMs={1000}
                 className={cn(TOOL_ROW_TITLE_CLASS, 'inline-flex items-center flex-shrink-0 opacity-85')}
-                style={{ color: 'var(--tools-title)' }}
+                style={{ color: isInvalidGroup ? 'var(--status-error)' : 'var(--tools-title)' }}
                 title={displayName}
             >
                 {displayName}
@@ -819,11 +833,19 @@ const StaticToolRowInner: React.FC<{
                     </button>
                 ))
                 : null}
-            {!isReadGroup && !isSearchGroup && !isFetchGroup && !isSkillGroup && descriptions.length > 0 ? (
+            {!isReadGroup && !isSearchGroup && !isFetchGroup && !isSkillGroup && !isInvalidGroup && descriptions.length > 0 ? (
                 <Text
                     variant={animateTailText ? 'generate-effect' : 'static'}
                     className={cn('min-w-0 flex-1 truncate whitespace-nowrap', TOOL_ROW_DESCRIPTION_CLASS)}
                     style={{ color: 'var(--tools-description)' }}
+                >
+                    {descriptions.join(' ')}
+                </Text>
+            ) : isInvalidGroup && descriptions.length > 0 ? (
+                <Text
+                    variant={animateTailText ? 'generate-effect' : 'static'}
+                    className={cn('min-w-0 flex-1 truncate whitespace-nowrap', TOOL_ROW_DESCRIPTION_CLASS)}
+                    style={{ color: 'var(--status-error)' }}
                 >
                     {descriptions.join(' ')}
                 </Text>

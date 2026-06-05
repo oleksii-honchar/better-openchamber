@@ -62,6 +62,9 @@ export const getToolIcon = (toolName: string) => {
     if (tool === 'plan_exit') {
         return <Icon name="task" className={iconClass} />;
     }
+    if (tool === 'invalid') {
+        return <Icon name="alert-circle" className={iconClass} style={{ color: 'var(--status-error)' }} />;
+    }
     if (tool.startsWith('git')) {
         return <Icon name="git-branch" className={iconClass} />;
     }

@@ -3,6 +3,7 @@ const EXPANDABLE_TOOL_NAMES = new Set<string>([
     'bash', 'shell', 'cmd', 'terminal',
     'write', 'create', 'file_write',
     'question', 'task',
+    'invalid',
 ]);
 
 const STANDALONE_TOOL_NAMES = new Set<string>(['task']);
