@@ -1,6 +1,6 @@
 # better-openchamber Governance
 
-VS Code extension fork procedures for maintaining `better-openchamber` — syncing with upstream, feature branching, VSIX builds, and preserving fork-specific escape hatches.
+Procedures for maintaining `better-openchamber` — syncing with upstream via rebase, feature branching, VSIX builds, conflict resolution priorities, and preserving fork-specific features.
 
 For overview, see [BETTER-OPENCHAMBER.md](./BETTER-OPENCHAMBER.md).
 
@@ -9,97 +9,136 @@ For overview, see [BETTER-OPENCHAMBER.md](./BETTER-OPENCHAMBER.md).
 ## Fork Structure
 
 ```
-                      upstream/ahmedbouchakour1/openchamber
-                      ┌───────────────────────────────────────┐
-                      │  main (upstream default)              │◀── upstream target
-                      └───────────────────────────────────────┘
-                                │
-                                │ fork
-                                ▼
-                oleksii-honchar/better-openchamber (origin)
-                ┌────────────────────────────────────────────┐
-                │  main (mirrors upstream/main)               │◀── kept current  
-                │  patched/dev (working branch)               │◀── escapes + synced with upstream
-                │  260518-feat-01, ...                         │◀── feature branches off patched/dev
-                └────────────────────────────────────────────┘
+upstream/btriapitsyn/openchamber
+└── main
+    │
+    ▼ fork (oleksii-honchar/better-openchamber)
+    └── patched/main              ← Working branch (4 commits ahead, 197 behind)
+        ├── feat-01               ← Feature branches (merged)
+        ├── fix/invalid-tool-log  ← Fix branch (merged)
+        └── <new-feature>         ← Branch off patched/main, rebase before merge
 ```
 
 **Key rules:**
-- **`main`** — Mirrors upstream/main. Kept current via periodic sync and rebase  
-- **`patched/dev`** — Working branch containing escape hatches + synced with upstream  
-- **Feature branches** — Branch off `patched/dev`, rebase onto it before merge  
-- **`origin`** — Your fork remote (push target)  
-- **`upstream`** — Original repo read-only, never push here directly  
+
+- **`patched/main`** — Working branch containing all fork features + synced with upstream via rebase. DO NOT merge into this branch — rebase onto it.
+- **`main`** — May track upstream/main (could be behind; `patched/main` is the active branch).
+- **Feature branches** — Branch off `patched/main`, rebase onto it before merge.
+- **`origin`** — `git@github.com:oleksii-honchar/better-openchamber.git` (push target)
+- **`upstream`** — `https://github.com/btriapitsyn/openchamber.git` (read-only fetch)
 
 ---
 
-## Core Principle: Preserve Escape Hatches
+## Core Principle: Preserve Fork Features
 
-When resolving conflicts between our feature code and upstream changes:
+When resolving conflicts between our fork code and upstream changes:
 
-1. **Always preserve our escape hatch logic** — if a conflict exists between our changes and upstream changes, the fork's user-configurable overrides win  
-2. **Adapt to upstream structural changes** — if upstream changed APIs or patterns (TypeScript interfaces, component props), adapt our code while preserving behavior  
-3. **Never discard our settings toggles** — do NOT use `-X theirs` when `subagents.editable` feature flag code is involved  
-4. **If unsure, keep both temporarily** — include both versions then dedupe manually; safer to fix twice than lose the escape
+1. **Always preserve our fork logic** — If a conflict exists, our features win
+2. **Adapt to upstream structural changes** — If upstream changed APIs or patterns, adapt our code while preserving behavior
+3. **Never discard our feature flags** — Do NOT use `-X theirs` when feature flag code is involved
+4. **If unsure, keep both temporarily** — Include both versions then dedupe manually; safer to fix twice than lose the feature
+
+### Fork Features That Must Survive Every Rebase
+
+1. **Feature flags system** (`useFeatureFlagsStore`, `featureFlags.ts`)
+2. **Editable subagents** (`subagents.editable` in settings, ChatContainer.tsx logic)
+3. **Multi-root workspace folders** (extension → webview → SDK → server chain)
+4. **Invalid tool rendering** (5 tool rendering files)
+5. **Local SDK path** (Vite alias in `vite.config.ts`)
+6. **Better provider logos** (`useProviderLogo.ts`, `desktop.ts`)
+7. **Fork documentation** (`docs/` directory)
+8. **VSIX build script** (`scripts/build-vsix.sh`)
+9. **Bun polyfills** (`bun-polyfills.ts`)
+10. **Test setup** (`ChatContainer.test.tsx`, `test-setup.ts`)
+11. **Folder-specific config** (`.opencode/openagent.json`)
 
 ---
 
-## Syncing with Upstream
+## Rebasing with Upstream
 
-**Before major changes, always sync first:**
+### Before Rebasing: Assess Divergence
 
 ```bash
 cd ~/www/misc/better-openchamber
 
-# 1. Fetch latest from both remotes  
+# Fetch latest from both remotes
 git fetch upstream main --quiet
 git fetch origin --quiet
 
-# 2. Check divergence
-git log --oneline patched/dev..upstream/main | wc -l  # commits behind
-git log --oneline upstream/main..patched/dev | wc -l  # commits ahead  
+# Check divergence
+echo "Commits behind upstream: $(git log --oneline patched/main..upstream/main | wc -l)"
+echo "Commits ahead of upstream: $(git log --oneline upstream/main..patched/main | wc -l)"
 
-# 3. Rebase patched/dev onto upstream/main  
-git checkout patched/dev
-git rebase upstream/main
+# List our commits
+git log --oneline upstream/main..patched/main
 
-# 4. If conflicts occur (resolve preserving our features):
-#    - Open conflicted files, keep our escape logic, adapt to new types if needed
-#    - git add <resolved-file>
-#    - git rebase --continue
+# Find merge base
+git merge-base patched/main upstream/main
 ```
+
+### Rebase Workflow
+
+```bash
+git checkout patched/main
+git rebase upstream/main
+```
+
+If conflicts occur:
+
+1. Open each conflicted file
+2. **Keep our fork logic** — especially in feature flag, workspace folders, and tool rendering files
+3. **Adapt to upstream's new types/APIs** if needed
+4. `git add <resolved-file>`
+5. `git rebase --continue`
+6. Test thoroughly (build VSIX, install, verify features)
+
+### Known Conflict Zones (from `patched/main` vs `upstream/main` analysis)
+
+| File | Our Change | Upstream Changes | Resolution Strategy |
+|------|-----------|-----------------|-------------------|
+| `package.json` | Fork name, scripts, deps | 30+ upstream changes | Keep fork metadata + upstream deps |
+| `OpenChamberVisualSettings.tsx` | Feature flag toggles | Multiple setting additions | Merge both sets of settings |
+| `desktop.ts` | Provider logos | Electron refactoring | Add our logos to new structure |
+| `client.ts` | SDK additions | Multiple SDK client changes | Merge both |
+| `session-actions.ts` | workspaceFolders | Review flow, session share | Merge both; preserve workspaceFolders |
+| `session-ui-store.ts` | workspaceFolders support | Multiple upstream changes | Merge both |
+| `packages/vscode/*.ts` (3 providers) | workspaceFolders injection | Extension updates | Merge both |
+| `webviewHtml.ts` + `webview/main.tsx` | workspaceFolders injection | Webview changes | Merge both |
+| `packages/vscode/package.json` | Fork naming + VSIX config | Extension config | Keep fork naming |
+| Tool rendering files (5) | `invalid` tool UI | Diagram editor, LSP output | Verify `invalid` still works |
+
+### Post-Rebase Testing Checklist
+
+- [ ] `subagents.editable: true` — subagent chats are editable
+- [ ] `subagents.editable: false` — subagent chats are read-only
+- [ ] Multi-root workspace shows all folders in `<env>` block
+- [ ] Invalid tool calls show error UI
+- [ ] VSIX builds successfully
+- [ ] Provider logos render
+- [ ] Feature flag defaults apply correctly
+- [ ] `package.json` version is correct
+- [ ] All translations load
 
 ---
 
 ## VSIX Build Workflow
 
-Unlike CLI forks that build binaries, this extension builds **VSIX packages** for immediate testing without upstream sync delays:
-
-### Quick Local Build (Temporary Version)
+### Quick Local Build
 
 ```bash
 cd ~/www/misc/better-openchamber
 
-# Build with temp version suffix (doesn't dirty git)
-./scripts/build-vsix.sh --vsix-version "1.11.2-local" 
-# Output: ~/Downloads/openchamber-1.11.2-local.xxx.vsix
+./scripts/build-vsix.sh --vsix-version "1.12.4-local"
+# Output: ~/Downloads/openchamber-1.12.4-local.xxx.vsix
 
-# Install into VSCode/VsCodium  
-code --install-extension ~/Downloads/openchamber-1.11.2-local.xxx.vsix
-
-# Verify
-code --list-extensions --show-debug-with-bootloader  # should show local extension
+code --install-extension ~/Downloads/openchamber-1.12.4-local.xxx.vsix
 ```
 
-### Dev Loop Without Committing Version Bumps
-
-The build script temporarily sets `package.json` version, builds the VSIX, then reverts:
+### Build with Custom Name
 
 ```bash
 ./scripts/build-vsix.sh --vsix-name testfork --vsix-version dev-abc123
-# Temporarily sets package.json "version": "dev-abc123"  
-# Outputs: ~/Downloads/testfork-dev-abc123.vsix
-# Reverts version after build completes
+# Temporarily sets version, builds, reverts
 ```
 
 ---
@@ -111,72 +150,69 @@ The build script temporarily sets `package.json` version, builds the VSIX, then 
 ```bash
 cd ~/www/misc/better-openchamber
 
-# Ensure patched/dev is current
-git checkout patched/dev  
-git pull origin patched/dev
+git checkout patched/main
+git pull origin patched/main
 
-# Create branch (YYYYMMDD-feat-X format)  
-git checkout -b 260518-feat-01-editable-subagents
+git checkout -b 260612-feat-<description>
 ```
 
 ### Work & Commit
 
 ```bash
-# Make changes (e.g., add subagents.editable flag to ChatContainer.tsx)
-# ... edit files ...
-
+# Make changes, then:
 git add .
-git commit -m "feat: add subagents.editable feature flag to restore editable subtasks"
+git commit -m "feat: <description>"
 ```
 
 ### Rebase Before Merge
 
-Always rebase onto `patched/dev` before merging back to keep linear history:
-
 ```bash
-# Make sure patched/dev is current
-git checkout patched/dev  
-git pull origin patched/dev
+git checkout patched/main
+git pull origin patched/main
 
-# Switch to feature and rebase
-git checkout 260518-feat-01-editable-subagents
-git rebase patched/dev
+git checkout 260612-feat-<description>
+git rebase patched/main
 
-# Resolve conflicts preserving our escape logic (see Core Principle above)
-
-# Force-push rebased branch  
-git push origin 260518-feat-01-editable-subagents --force-with-lease
+# Resolve conflicts preserving fork features
+# Force-push if already on origin
+git push origin 260612-feat-<description> --force-with-lease
 ```
 
-### Merge Into patched/dev
+### Merge Into patched/main
 
 ```bash
-git checkout patched/dev
-git merge 260518-feat-01-editable-subagents --no-ff  # preserve feature branch identity  
-git push origin patched/dev
+git checkout patched/main
+git merge 260612-feat-<description> --no-ff
+git push origin patched/main
 ```
 
 ---
 
-## Development with VSCode Extension
+## After Rebase: Working with Upstream's Multi-Root Support
 
-Unlike CLI mode (which uses `start-dev.sh` with Bun dev server), extension development requires building VSIXes for testing:
+Upstream v1.12.4 added multi-root VS Code workspace support (#1493, `f2874fbc`). Post-rebase:
+
+1. **Review upstream's approach** — It may provide complementary or overlapping functionality
+2. **Remove our `$body_` workaround** if upstream's approach covers it
+3. **Keep our local SDK alias** — it has native `workspaceFolders` field
+4. **Test both single-root and multi-root** workspaces
+
+---
+
+## VS Code Extension Development
 
 ### Build & Install Cycle
 
-1. **Make code change** (e.g., add env var check in ChatContainer.tsx)  
-2. **Build VSIX**: `./scripts/build-vsix.sh --vsix-version "test-$(date +%s)"`
-3. **Install**: `code --install-extension ~/Downloads/<file>.vsix`
-4. **Test** in VsCode with subagent sessions open
-5. **Debug**: Toggle flag in settings or env, verify read-only banner disappears when typing
+1. Make code change on feature branch
+2. Build VSIX: `./scripts/build-vsix.sh --vsix-version "test-$(date +%s)"`
+3. Install: `code --install-extension ~/Downloads/<file>.vsix --force`
+4. Test in VsCode
+5. Debug: Extension debug output in VSCode Developer Tools (Help → Toggle Developer Tools → Console)
 
 ### Settings Locations
 
-User settings for testing escape hatches:
-- Settings UI: `OpenChamber` > `Features` > `Editable Subagents` toggle (checkbox)
-- Settings JSON: `openchamber.subagents.editable: true` in user or workspace settings  
-
-Extension debug output shows in VSCode Developer Tools (Help → Toggle Developer Tools → Console).
+- Settings UI: `OpenChamber` > `Features` > `Editable Subagents`
+- Settings JSON: `"openchamber.subagents.editable": true`
 
 ---
 
@@ -184,42 +220,47 @@ Extension debug output shows in VSCode Developer Tools (Help → Toggle Develope
 
 | Problem | Solution |
 |---------|----------|
-| Rebase conflict on patched/dev | Resolve preserving escape code, run `git rebase --continue` |
-| Accidentally discarded feature flag code | Check `git reflog` or `git checkout -p HEAD~1 packages/ui/src/...` to recover |
-| VSIX won't install (version conflict) | Use `--force` with `code --install-extension <file>.vsix --force`, or increment version in `package.json` manually before building again |
+| Rebase conflict on patched/main | Resolve preserving fork features, `git rebase --continue` |
+| Accidentally discarded feature flag code | Check `git reflog` or `git checkout -p HEAD~1` to recover |
+| VSIX won't install | Use `code --install-extension <file>.vsix --force` |
+| Rebase failed mid-way | `git rebase --abort`, reassess divergence, re-plan |
 
 ---
 
 ## Common Mistakes
 
-- **Don't push feature branches without rebasing first** — Always rebase onto patched/dev to preserve linear history  
-- **Don't use `git merge upstream/main` into patched/dev** — This creates a merge commit; prefer rebasing (`git rebase upstream/main`) to keep clean "ours on top of theirs" semantics
-- **Don't forget the extension build cycle differs from CLI** — No Bun dev server for the extension itself (that's Opencode CLI); VSIX builds are the loop  
-- **Don't ignore spec documents** — Each feature must have a spec in `docs/spec/` before implementation starts
+- **Don't use `git merge upstream/main`** — Creates merge commits; prefer rebasing to keep clean "ours on top of theirs"
+- **Don't discard fork features during conflict resolution** — Feature flag code is fragile; preserve it
+- **Don't forget the post-rebase testing checklist** — 11 fork features to verify
+- **Don't skip the upstream diff analysis** — Run a divergence check before every rebase
+- **Don't ignore upstream's multi-root implementation** — v1.12.4 may have a better solution
 
 ---
 
 ## Branch Checklist
 
-Before pushing to GitHub:
+Before pushing to GitHub after rebase:
 
 ```bash
 cd ~/www/misc/better-openchamber
 
-# 1. Synced?
-git fetch upstream main && git log --oneline patched/dev..upstream/main | head -5
+# 1. Synced with upstream?
+git fetch upstream main
+echo "Behind: $(git log --oneline patched/main..upstream/main | wc -l)"
 
-# 2. Rebases cleanly?
-git checkout <feature-branch>
-git rebase -s origin/patched/dev  # -s to interactively squash if needed
-
-# 3. Docs updated?  
-ls docs/spec/<feat>-*.md && grep -q "Status: ⏳ In-flight" docs/FEATURES.md
-
-# 4. VSIX builds successfully?
+# 2. Builds successfully?
 ./scripts/build-vsix.sh --vsix-name test --vsix-version preflight
+
+# 3. All docs updated?
+ls docs/*.md && ls docs/spec/*.md
+
+# 4. Fork features verified?
+#   - Feature flags work
+#   - Workspace folders work
+#   - Invalid tool rendering works
+#   - SDK alias is correct
 ```
 
 ---
 
-**Last updated**: May 18, 2026 (v1.11.1 read-only escape hatch design)
+**Last updated**: June 12, 2026 (rebase strategy for 4 commits, 197 commits behind)

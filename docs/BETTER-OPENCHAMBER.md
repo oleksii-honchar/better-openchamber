@@ -2,32 +2,125 @@
 
 ## Purpose
 
-A maintained fork of [OpenChamber](https://github.com/ahmedbouchakour1/openchamber) (VS Code extension for code exploration) that adds user-configurable escape hatches for recent restrictive changes while preserving all upstream behavior.
+A maintained fork of [OpenChamber](https://github.com/btriapitsyn/openchamber) (VS Code extension — see SECURITY.md: originally `ahmedbouchakour1/openchamber`, now maintained at `btriapitsyn/openchamber`) that adds fork-specific improvements while preserving all upstream behavior.
 
-Primary motivation: **v1.11.1 read-only subagents** — The feature flag `subagents.editable` lets users opt out of read-only enforcement without waiting for upstream changes or losing other v1.11.1 improvements.
+The fork tracks `upstream/main` on a `patched/main` branch and currently sits **4 commits ahead, 197 commits behind** (merge base `bdaade01`). It is **6 releases behind** upstream (v1.11.7 → v1.12.4).
 
-This fork mirrors the docs structure of `better-opencode` for consistency, with extension-specific features (Feature Flags, Spec-driven design).
-
----
-
-## Scope: What This Fork Fixes Now
-
-**v1.11.1 Subagent Read-Only Lock (#08)**
-
-OpenChamber v1.11.1 (May 15–18, 2026) introduced `readOnly: true` for subagent sessions opened from the Context Panel and parent sessions via `Boolean(parentSession)` logic in `ChatContainer.tsx`. The fork adds a runtime escape hatch without touching all upstream code.
-
-See **[FEATURES.md](./FEATURES.md)** and **spec/01-subagent-read-only-feature-flag.md**.
+**Primary goal:** Deliver fork-specific features (feature flags, multi-root workspace folders, invalid tool rendering, local SDK alias) on top of upstream while preparing for a clean rebase.
 
 ---
 
-## Docs Structure
+## Current Fork State (as of June 12, 2026)
 
-Mirrors `better-opencode/docs` for familiarity, adapted for VS Code extension development:
+| Metric | Value |
+|--------|-------|
+| **Current branch** | `patched/main` |
+| **Upstream remote** | `btriapitsyn/openchamber` |
+| **Merge base** | `bdaade01` — "fix: session rename exits immediately due to focus race (#1429)" |
+| **Our commits since fork** | **4** |
+| **Upstream commits behind** | **197** (6 releases: v1.11.7 → v1.12.4) |
+| **Upstream repo** | `https://github.com/btriapitsyn/openchamber.git` |
+| **Our origin** | `git@github.com:oleksii-honchar/better-openchamber.git` |
 
-- **[FEATURES.md](./FEATURES.md)** — Current feature list and implementation status  
-- **[GOVERNANCE.md](./GOVERNANCE.md)** — Decision log and process  
-- **`spec/`** — Implementation specs for in-flight features (01-, 02-, etc.)  
-- `scripts/build-vsix.sh` — On-demand VSIX builds from any branch
+### Our 4 Commits
+
+1. **`00cc7423`** — `chore: fork setup` (May 18, 2026) — Initial fork: docs, feature flags system, workspace folders, provider logos, translations, VSIX build script, Bun polyfills, test setup. 36 files changed.
+2. **`fb4696ce`** — `docs` (May 27, 2026) — Documentation updates: clarified `$body_` workaround vs native SDK support in workspace folders spec.
+3. **`b349078b`** — `fix: tool cal fixes` (Jun 5, 2026) — "Invalid" tool call rendering in chat UI (5 tool rendering files).
+4. **`064b6858`** — `fix(vite.config): update SDK alias path` (Jun 11, 2026) — Point Vite SDK alias to local `better-opencode/packages/sdk` + remove `$body_` prefix workaround.
+
+### Upstream Releases We're Missing
+
+| Release | Key Changes |
+|---------|-------------|
+| **v1.11.7** | Chat rerender perf, queued messages, draft sessions |
+| **v1.12.0** | Electron desktop, remote instances, session archive, mobile UX |
+| **v1.12.1** | Changed files display, LSP tool output, streaming fixes |
+| **v1.12.2** | Windows support, PR review CI |
+| **v1.12.3** | Startup readiness, file tree reliability |
+| **v1.12.4** | Session review, fast worktree flows, diagram editor, vim mode, TTS, macOS tray, multi-root VS Code (#1493), settings search |
+
+### Upstream Multi-Root Consideration
+
+Upstream v1.12.4 includes a multi-root VS Code workspace feature (#1493, `f2874fbc`) that may overlap with our `$body_` workaround + local SDK native field approach. This must be reviewed during rebase — upstream's solution may supersede or complement ours.
+
+---
+
+## Fork Features
+
+See **[FEATURES.md](./FEATURES.md)** for full details.
+
+1. **Feature Flags System** — Runtime feature flags (`subagents.editable`, `planMode.enabled`) with Settings UI toggle + env var fallback
+2. **Editable Subagents** — `subagents.editable` flag restores editability for subagent chats (default: `true`)
+3. **Multi-Root VS Code Workspace Folders** — Wire `workspaceFolders[]` end-to-end: extension → webview → SDK → server (with `$body_` prefix workaround for npm SDK; local SDK has native field)
+4. **Invalid Tool Call Rendering** — Custom error UI for undefined tool calls (red border/background, error details)
+5. **Local SDK Alias** — Vite config aliases `@opencode-ai/sdk/v2` → local `better-opencode/packages/sdk/js/dist/v2/client.js`
+6. **Better Provider Logos** — Additional provider logos via `useProviderLogo.ts`
+7. **VSIX Build Script** — On-demand VSIX builds from any branch (`scripts/build-vsix.sh`)
+8. **Bun Polyfills** — `bun-polyfills.ts` for Bun compatibility
+9. **Fork Documentation** — `docs/BETTER-OPENCHAMBER.md`, `docs/FEATURES.md`, `docs/GOVERNANCE.md`, `docs/spec/`
+
+---
+
+## Branch Strategy
+
+```
+upstream/btriapitsyn/openchamber
+└── main
+    │
+    ▼ fork (oleksii-honchar/better-openchamber)
+    └── patched/main          ← Working branch with our 4 commits
+        ├── feat-01           ← Feature branches (merged)
+        └── fix/invalid-tool-log
+```
+
+- **`patched/main`** — Working branch containing all fork features + synced with upstream via rebase
+- **`patched/main-1/pre-squash`** — Pre-squash backup of earlier work
+- **`main`** — Tracks upstream/main (may be behind)
+- **Feature branches** — Branched off `patched/main`, merged back after rebase
+
+---
+
+## Rebase Plan (Next Steps)
+
+A rebase onto `upstream/main` is the recommended approach (keeps clean linear history). The findings from the upstream diff analysis (see session `260612-1423-upstream-branch-diff`) identified:
+
+### Rebase Phases
+
+| Phase | Description | Effort |
+|-------|-------------|--------|
+| **Commit 1 rebase** (`00cc7423`) | Resolve ~13 conflicting files (package.json, feature flags, settings, session-actions.ts, session-ui-store.ts, desktop.ts, client.ts, 3 VS Code providers, webview files, VS Code package.json) | **High** |
+| **Commit 2 rebase** (`fb4696ce`) | Docs only, no code | **Trivial** |
+| **Commit 3 rebase** (`b349078b`) | 5 tool rendering files (`ProgressiveGroup.tsx`, `ToolPart.tsx`, `toolPresentation.tsx`, `toolRenderUtils.ts`, `toolHelpers.ts`) — need to verify invalid tool rendering against upstream's reworked rendering paths | **Medium** |
+| **Commit 4 rebase** (`064b6858`) | 2 files, but `session-actions.ts` has upstream changes (review flow, session share, decoupled UI) — ensure `$body_` workaround removal is correct | **Medium** |
+| **Post-rebase testing** | Verify all 11 fork features still work | **Medium-High** |
+
+### Key Conflict Zones
+
+| File | Conflict Type |
+|------|--------------|
+| `package.json` | 30+ upstream changes |
+| `OpenChamberVisualSettings.tsx` | Upstream rewrote extensively |
+| `session-actions.ts` | Upstream review flow + decoupled UI |
+| `desktop.ts` | Upstream Electron refactoring |
+| `client.ts` | Multiple upstream SDK client changes |
+| `session-ui-store.ts` | Multiple upstream changes |
+| `packages/vscode/*` providers | Upstream extension updates |
+| 5 tool rendering files (Commit 3) | Upstream reworked rendering paths |
+
+### Fork Features That Must Survive Rebase
+
+1. **Folder-specific configuration** — `.opencode/openagent.json`
+2. **Feature flags system** — `useFeatureFlagsStore`, `featureFlags` in settings
+3. **Multi-root VS Code workspace folders** — Full end-to-end chain
+4. **Invalid tool rendering** — Custom error UI for undefined tools
+5. **Local SDK path** — Vite alias to `better-opencode/packages/sdk`
+6. **Better provider logos** — `useProviderLogo.ts` additions
+7. **Fork documentation** — `docs/` directory
+8. **VSIX build scripts** — `scripts/build-vsix.sh`
+9. **Bun polyfills** — `bun-polyfills.ts`
+10. **Test setup** — `ChatContainer.test.tsx`, `test-setup.ts`
+11. **Desktop utilities** — `lib/desktop.ts` additions
 
 ---
 
@@ -35,112 +128,35 @@ Mirrors `better-opencode/docs` for familiarity, adapted for VS Code extension de
 
 ### Prerequisites
 
-- **macOS / Linux / Windows** (VS Code runtime)  
-- **Node.js** 20+ and `npm`/`yarn`  
+- **macOS / Linux / Windows** (VS Code runtime)
+- **Node.js** 20+ and `npm`/`yarn`
 - **Git** — for rebasing upstream
 
 ### Clone the Fork
 
 ```bash
 cd ~/www/misc
-git clone https://github.com/oleksii-honchar/better-openchamber.git
+git clone git@github.com:oleksii-honchar/better-openchamber.git
 cd better-openchamber
 ```
 
 ### Build VSIX (Development)
 
-Create a local VSIX extension without code changes:
-
 ```bash
 # From repo root
-./scripts/build-vsix.sh --vsix-version "1.11.2-local" 
-# Outputs: ~/Downloads/openchamber-1.11.2-local.xxxxx.vsix
+./scripts/build-vsix.sh --vsix-version "1.12.4-local"
+# Outputs: ~/Downloads/openchamber-1.12.4-local.xxxxx.vsix
 
 # Install into VSCode/VsCodium
-code --install-extension ~/Downloads/openchamber-1.11.2-local.xxxxx.vsix
+code --install-extension ~/Downloads/openchamber-1.12.4-local.xxxxx.vsix
 ```
-
-Use `--vsix-name <name>` to customize output filename.
 
 ### Daily Development Loop
 
-1. Make change in fork (e.g., add `subagents.editable` flag)  
+1. Make change on feature branch off `patched/main`
 2. Build VSIX: `./scripts/build-vsix.sh --vsix-version "dev-$(git rev-parse --short HEAD)"`
-3. Install: `code --install-extension ~/Downloads/<built>.vsix`  
+3. Install: `code --install-extension ~/Downloads/<built>.vsix`
 4. Test in VsCode with fresh workspace
-
----
-
-## Branch Strategy
-
-**Main branches**:
-
-- `main` — Tracks OpenChamber `main`, PR-ready  
-- `patched/dev` — Feature integration branch where all PRs merge before release candidate
-
-**Workflow**:
-1. Create feature branch from `patched/dev`
-2. Implement change (add flag, add setting, update ChatContainer logic)  
-3. Rebase onto `patched/dev` if needed (`git rebase -i`)  
-4. Merge into `patched/dev`, then eventually PR to upstream or release as VSIX
-
----
-
-## Current Active Work
-
-**Feature #08 → Renumbered to #01: Editable Subagents**
-
-Add `subagents.editable` feature flag (default `false`) that conditionally skips read-only enforcement in `ChatContainer.tsx` and `MessageBody.tsx`, allowing users to type into subagent sessions while keeping parent-session safety.
-
-See **[spec/08-subagent-read-only-feature-flag.md]** — renamed from `08-...` to be the first active spec after docs bootstrap (previous specs 01–07 were Opencode-CLI specific; this is OpenChamber-specific).
-
----
-
-## New in v1.11.x: Editable Subagents
-
-OpenChamber v1.11.1 introduced read-only subagent sessions to preserve reference material, but this changed the expected behavior for many users. The `better-openchamber` fork adds control back via the `subagents.editable` feature flag.
-
-### What is a Subagent?
-
-A **subagent** (also called a **"subtask"**) is a spun-off session created when you click "Open Session" on a chat message from a subagent suggestion. These appear as separate tabs in the Context Panel, allowing you to continue specific threads without cluttering the main conversation.
-
-### Changed Default Behavior (v1.11.2+)
-
-**Important:** Starting with v1.11.2-better, subagents are **editable by default**. If you upgraded from v1.11.2 and notice you can suddenly type in subagent chats that were previously frozen, this is the cause — the default changed from `readOnly: true` to editable via `subagents.editable`.
-
-### Enabling Editable Subagents
-
-**Option 1: Settings UI (Recommended)**
-
-The easiest way is through VS Code Settings:
-1. Open Command Palette (⌘/Ctrl+Shift+P) → **"OpenChamber: Open Settings"**
-2. Find **"Editable Subagents"** checkbox under OpenChamber settings
-3. Check the box to enable typing in subagent chats
-
-**Option 2: VS Code settings.json**
-
-Add this to your workspace or user settings (`.vscode/settings.json` or `settings.json`):
-
-```json
-{
-  "opencode.subagents.editable": true
-}
-```
-
-**Option 3: Environment Variable** (Dev/CI)
-
-For local development or CI environments, set the environment variable before launching VS Code:
-
-```bash
-export OPENCODE_SUBAGENTS_EDITABLE=true
-code .
-```
-
-*Note: Requires VS Code restart to take effect.*
-
-### Why This Matters
-
-Without this feature flag, subagent sessions opened from the Context Panel are read-only (v1.11.1 behavior). With `subagents.editable` enabled, you can type directly in those spun-off sessions while still preserving the safety of parent session references.
 
 ---
 
@@ -149,32 +165,21 @@ Without this feature flag, subagent sessions opened from the Context Panel are r
 | Aspect | better-opencode | better-openchamber |
 |--------|----------------|-------------------|
 | **Base** | Opencode CLI agent | OpenChamber VS Code extension |
-| **Core issue** | Context loss after ~5 turns, repetitive loops | Read-only subagents in v1.11.1 losing editability |
+| **Core issue** | Context loss after ~5 turns, repetitive loops | Various fork extensions on OpenChamber |
 | **Delivery** | Binary `~/bin/better-opencode` (bun scripts) | VSIX package (`vsce package`) |
 | **Docs sync** | Shared `docs/` layout adapted for extension workflow | — |
-
-Both use spec-driven development in `docs/spec/` and on-demand builds, but target different runtimes (CLI vs. Extension).
-
----
-
-## Quick Start Checklist
-
-New contributor setting up the fork:
-
-- [ ] Clone to `~/www/misc/better-openchamber`  
-- [ ] Verify docs structure exists (`FEATURES.md`, `GOVERNANCE.md`, `spec/`)
-- [ ] Build initial VSIX with `./scripts/build-vsix.sh --vsix-version "1.11.2-test"`  
-- [ ] Read `findings.md` from current session (v1.11.1 read-only commits)  
-- [ ] Implement first feature flag (`subagents.editable`) in ChatContainer.tsx
+| **Branch** | `patched/dev` (CLI agent) | `patched/main` (VS Code extension) |
 
 ---
 
 ## Links
 
-- **OpenChamber upstream**: https://github.com/ahmedbouchakour1/openchamber  
-- **Better Opencode (reference)**: https://github.com/anomalyco/better-opencode  
-- **Current Session**: [ses_1c581a0e5ffeztZdz5gZ2qIRm3](file://~/.agent-sessions/26/05/18/260518-1947-openchamber-subagent-readonly/session.md)
+- **Upstream**: https://github.com/btriapitsyn/openchamber
+- **Our origin**: https://github.com/oleksii-honchar/better-openchamber
+- **Better Opencode (reference)**: https://github.com/anomalyco/better-opencode
+- **Rebase Diff Session**: `~/.agent-sessions/26/06/12/260612-1423-upstream-branch-diff/`
+- **Findings Report**: `~/.agent-sessions/26/06/12/260612-1423-upstream-branch-diff/findings.md`
 
 ---
 
-**Last updated**: May 18, 2026 (v1.11.1 read-only freeze documentation + feature flag design complete)
+**Last updated**: June 12, 2026 (full fork state documentation for rebase planning)

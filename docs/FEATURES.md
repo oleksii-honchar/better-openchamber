@@ -1,135 +1,148 @@
 # better-openchamber Features
 
-VS Code extension features added or modified by the `better-openchamber` fork to preserve flexibility while tracking upstream improvements.
+VS Code extension features added or modified by the `better-openchamber` fork. Organized by current state.
 
 For overview, see [BETTER-OPENCHAMBER.md](./BETTER-OPENCHAMBER.md).
 
 ---
 
-## 1. Editable Subagents Feature Flag (`subagents.editable`)
+## ✅ Complete Features
+
+### 1. Feature Flags System
+
+**Status:** ✅ Complete (shipped in fork commit `00cc7423`)
+
+A runtime feature flag system implemented in the fork that controls fork-specific behaviors:
+
+- **Store:** `packages/ui/src/stores/useFeatureFlagsStore.ts` — Zustand store with `planModeEnabled` and `editableSubagents` flags
+- **API:** `packages/ui/src/lib/featureFlags.ts` — `getFeatureFlag()` and `useFeatureFlag()` hook with Settings UI → env var fallback chain
+- **Default:** Editable subagents default to `true`; plan mode defaults to `false`
+
+### 2. Editable Subagents (`subagents.editable`)
+
+**Status:** ✅ Complete (shipped in fork commit `00cc7423`)
 
 📋 [Detailed Spec](./spec/01-subagent-read-only-feature-flag.md)
 
-**Status:** ✅ In-flight — PR open for feature flag implementation  
-**v1.11.1 Freeze Date:** May 15, 2026
+Restores editability for subagent (subtask/spun-off) sessions via the `subagents.editable` feature flag.
 
-### Problem
+**How it works:**
+- `ChatContainer.tsx`: `const promptReadOnly = readOnly || (!allowEditableSubagents && Boolean(parentSession))`
+- `useFeatureFlagsStore.ts`: Default `editableSubagents: true`
+- `settings.ts`: TypeScript schema with `subagents.editable: boolean` (default `true`)
 
-OpenChamber v1.11.1 enforced read-only mode on subagent (subtask) sessions via two commits:
+**Configuration:**
 
-- **`526f9a51`**: Opens subagent sessions in Context Panel with `readOnly: true` hardcoded when clicking "Open session" from MessageBody.tsx  
-- **`e2f45bda`**: Enforces input-level read-only via `const promptReadOnly = readOnly || Boolean(parentSession)` in ChatContainer.tsx
+| Method | Value |
+|--------|-------|
+| **Settings UI** | OpenChamber Settings → Features → Editable Subagents |
+| **settings.json** | `"openchamber.subagents.editable": true/false` |
+| **Default** | `true` (editable by default) |
 
-Previously, users could edit subagent chats as sibling conversations after forking from a parent. The change was intentional: treat subagents as reference sessions viewable inline but not editable independently. However, some workflows prefer editable subagents while maintaining parent-safety constraints.
+### 3. Multi-Root VS Code Workspace Folders
 
-### Solution
-
-Add runtime feature flag `subagents.editable` (default `false`) that conditionally skips read-only enforcement:
-
-**In ChatContainer.tsx (~line 540):**
-```tsx
-const allowEditableSubagents = features?.get('subagents.editable') === 'true';
-// Old: const promptReadOnly = readOnly || Boolean(parentSession);
-const promptReadOnly = readOnly || (!allowEditableSubagents && Boolean(parentSession));
-```
-
-**In MessageBody.tsx (~line 160, optional):**
-When opening from "Open session" link:
-```tsx
-readOnly: !allowEditableSubagents,  // ← Toggleable instead of always true
-```
-
-### Configuration Options
-
-**Option A: Settings UI Toggle** (Planned)  
-### Implementation
-
-A checkbox toggle in Settings UI (`Features` > `Editable Subagents`) allows users to opt-in to editable subagent chats:
-
-**Settings JSON** (manual):
-```jsonc
-{
-  "openchamber.subagents.editable": true
-}
-```
-
-When enabled, subagent sessions opened from parent session links are fully writable.
-
-### Files Modified
-
-1. `packages/ui/src/components/chat/ChatContainer.tsx` — Add feature flag check (~5 lines)  
-2. `packages/ui/src/lib/settings.ts` — Define schema and getter for Settings-based toggle
-
-### Files Modified
-
-1. `packages/ui/src/components/chat/ChatContainer.tsx` — Add feature flag check (~5 lines)  
-2. `packages/ui/src/lib/features/definitions.ts` — Register toggle definition (or settings schema if using Option A)
-
-### Testing Matrix
-
-| Scenario | Flag Value | Expected |
-|----------|------------|----------|
-| Default upstream | false/unset | Subagents read-only (v1.11.2 behavior) |
-| Flag enabled | true | Can type into subagent sessions; Context Panel shows editable tabs |
-| Parent safety | any | Main parent session remains fully interactive |
-
----
-
-## 2. Multi-Root Workspace Folders (`workspaceFolders`)
+**Status:** ✅ Complete (shipped in fork commits `00cc7423` + `064b6858`)
 
 📋 [Detailed Spec](./spec/02-workspace-folders-multi-root.md)
 
-**Status:** ✅ Complete
+Wires `workspaceFolders[]` end-to-end from VS Code extension → webview → SDK → server, so multi-root workspaces see all folders instead of just the first one.
 
-### Problem
+**Data flow:**
+```
+VS Code (vscode.workspace.workspaceFolders)
+  → webviewHtml.ts (compute, inject into __VSCODE_CONFIG__)
+    → webview (read from __VSCODE_CONFIG__)
+      → session-actions.ts (SDK call)
+        → server → DB (workspace_folders column)
+          → system prompt (<env> block)
+```
 
-In multi-root VS Code workspaces, only the first workspace folder was visible to the server. The `workspaceFolders` array was never transmitted through the SDK — it was silently dropped by `buildClientParams` because `workspaceFolders` is not in the SDK v2's field definition for `Session2.create`. The server's `workspace_folders` DB column was always `null`.
+**SDK workaround:** Uses `$body_workspaceFolders` prefix for npm SDK v1.14.19 (which silently drops unknown keys in `buildClientParams`). The local SDK at `better-opencode/packages/sdk` has `workspaceFolders` as a native field.
 
-### Solution
+**Evolution:** Originally shipped with `$body_` prefix workaround (commit 1), then updated to remove prefix when local SDK alias was added (commit 4: `064b6858`).
 
-Wired `workspaceFolders` end-to-end:
+**⚠️ Upstream overlap:** Upstream v1.12.4 added multi-root VS Code support (#1493). Must review during rebase.
 
-1. **VS Code extension** computes `workspaceFolders` array from `vscode.workspace.workspaceFolders` (with `normalizeWindowsDriveLetter`), injects into `__VSCODE_CONFIG__`
-2. **Openchamber UI** reads `workspaceFolders` from `__VSCODE_CONFIG__` and passes it to SDK with the `$body_` prefix workaround (`$body_workspaceFolders`) to bypass the npm SDK v1.14.19's field definition gap (the local SDK has native support)
-3. **Server** receives `workspaceFolders` in `CreateInput.body`, stores in DB, injects into `<env>` system prompt
+### 4. Invalid Tool Call Rendering
 
-### Key Detail: `$body_` Prefix Workaround
+**Status:** ✅ Complete (shipped in fork commit `b349078b`, Jun 5, 2026)
 
-The npm SDK v1.14.19's `buildClientParams` silently drops unknown keys. Using `$body_workspaceFolders` forces the key into the request body because `$body_` is a recognized prefix (`$body_: "body"` in `params.gen.js`) that strips the prefix and places the value in `params.body`. The `as Record<string, unknown>` type cast bypasses TypeScript checking (exacerbated by `skipLibCheck: true`).
+Custom error UI for undefined tool calls (`invalid` tool type):
 
-**Note:** The local SDK at `better-opencode/packages/sdk` has `workspaceFolders` as a native field (sdk.gen.ts:3101). The standalone app uses the native field directly. Only the OpenChamber extension's npm SDK dependency requires the workaround. The proper fix is to update the npm SDK to include `workspaceFolders` in the session create field definition.
+| File | Change |
+|------|--------|
+| `ProgressiveGroup.tsx` | Error-colored title/description for `invalid` tool group |
+| `ToolPart.tsx` | Full expanded error view with red border/background showing tool name + error message |
+| `toolPresentation.tsx` | `alert-circle` icon with error color for `invalid` tool |
+| `toolRenderUtils.ts` | Added `invalid` to `EXPANDABLE_TOOL_NAMES` |
+| `toolHelpers.ts` | Added `invalid` to `TOOL_METADATA` with `tool` and `error` fields |
 
-### Files Modified
+**⚠️ Rebase risk:** All 5 files were also modified by upstream (diagram editor, LSP tool output, Electron support). Must verify our rendering still works after upstream rewrites.
 
-7 files across `packages/vscode` and `packages/ui` — see [spec](./spec/02-workspace-folders-multi-root.md) for details.
+### 5. Local SDK Alias
 
----
+**Status:** ✅ Complete (shipped in fork commit `064b6858`, Jun 11, 2026)
 
-## 3. On-Demand VSIX Build Script
+Vite config aliases `@opencode-ai/sdk/v2` → local `better-opencode/packages/sdk/js/dist/v2/client.js`.
 
-**Status:** ✅ Complete  
+**Benefits:**
+- Uses the local SDK's native `workspaceFolders` field (no `$body_` prefix needed)
+- Tracks SDK changes made in the better-opencode monorepo
+- Bypasses npm SDK v1.14.19 field definition limitations
+
+**Files:**
+- `packages/vscode/vite.config.ts` — Alias config
+- `packages/ui/src/sync/session-actions.ts` — Removed `$body_` prefix workaround
+
+### 6. VSIX Build Script
+
+**Status:** ✅ Complete (shipped with fork)
 
 `scripts/build-vsix.sh` enables building VSIX extensions from any branch without dirtying git version:
 
 ```bash
-# Quick local build with temp version suffix
-./scripts/build-vsix.sh --vsix-version "1.11.2-local" 
-# Outputs: ~/Downloads/openchamber-1.11.2-local.xxx.vsix
-
-# Custom naming
+./scripts/build-vsix.sh --vsix-version "1.12.4-local"
 ./scripts/build-vsix.sh --vsix-name myfork --vsix-version dev-latest
 ```
 
-See [BETTER-OPENCHAMBER.md](./BETTER-OPENCHAMBER.md) for quick start workflow.
+Temporarily sets `package.json` version, builds VSIX, then reverts.
+
+### 7. Better Provider Logos
+
+**Status:** ✅ Complete (shipped with fork)
+
+Additional provider logos via `packages/ui/src/hooks/useProviderLogo.ts` and desktop utilities in `packages/ui/src/lib/desktop.ts`.
+
+**⚠️ Rebase note:** Upstream deleted many provider logo SVGs. Verify compatibility during rebase.
+
+### 8. Bun Polyfills
+
+**Status:** ✅ Complete (shipped with fork)
+
+`packages/ui/src/bun-polyfills.ts` for Bun compatibility.
+
+### 9. Test Setup
+
+**Status:** ✅ Complete (shipped with fork)
+
+- `ChatContainer.test.tsx` — Test for subagent session handling
+- `test-setup.ts` — Test infrastructure
+
+### 10. Folder-Specific Configuration
+
+**Status:** ✅ Complete (shipped with fork)
+
+Agent config overrides via `.opencode/openagent.json` — per-folder configuration for the OpenCode agent.
 
 ---
 
 ## Future Candidates (Tracked)
 
-The following upstream features may warrant fork-specific escape hatches if restrictive:
+The following may warrant fork-specific work after rebase:
 
-- **Session-level read-only modes** — If upstream adds global read-only toggles, fork may provide per-session overrides  
-- **Context Panel embedded vs. dedicated view toggle** — Current behavior opens in panel; some users may prefer replacing main chat for subagents
+- **Session-level read-only modes** — If upstream adds global read-only toggles
+- **Context Panel embedded vs. dedicated view toggle** — UX preference
+- **Provider logo restoration** — If upstream deletions affect our additions
 
 ---
 
@@ -137,12 +150,12 @@ The following upstream features may warrant fork-specific escape hatches if rest
 
 | Feature | better-opencode (CLI) | better-openchamber (Extension) |
 |---------|---------------------|-------------------------------|
-| `tool.execute.after` | Inject synthetic messages after tools | N/A — Extension runtime differs |
-| Session ID in prompt | Yes (survives compaction) | Likely via extension context, not LLM system prompt compaction |
-| Read-only escape hatches | N/A | Primary focus now (`subagents.editable`) |
-
-The fork structure mirrors `better-opencode/docs` for consistency, but focuses on VS Code extension constraints rather than CLI session mechanics.
+| Feature flags | N/A | `subagents.editable`, `planMode.enabled` |
+| Workspace folders | N/A (CLI has cwd) | Full end-to-end multi-root support |
+| Tool rendering | Standard | Extended with `invalid` tool UI |
+| SDK | Local alias | Local alias to better-opencode SDK |
+| Provider logos | N/A | Extended provider logo set |
 
 ---
 
-**Last updated**: May 24, 2026 (workspaceFolders multi-root feature documented)
+**Last updated**: June 12, 2026 (full fork state after upstream diff analysis)
