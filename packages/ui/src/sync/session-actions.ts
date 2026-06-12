@@ -9,12 +9,19 @@ import { useSessionUIStore } from "./session-ui-store"
 import { useInputStore } from "./input-store"
 import type { ChildStoreManager } from "./child-store"
 import { opencodeClient } from "@/lib/opencode/client"
-import { useGlobalSessionsStore } from "@/stores/useGlobalSessionsStore"
+import { mergeSessionDirectoryMetadata, useGlobalSessionsStore } from "@/stores/useGlobalSessionsStore"
 import { useConfigStore } from "@/stores/useConfigStore"
 import { registerSessionDirectory } from "./sync-refs"
 import { isSyntheticPart } from "@/lib/messages/synthetic"
 import { materializeSessionSnapshots } from "./materialization"
-import { stripMessageDiffSnapshots } from "./sanitize"
+import { stripMessageDiffSnapshots, stripSessionDiffSnapshots } from "./sanitize"
+import {
+  getOriginalSessionID,
+  getSessionMetadata,
+  isReviewSession,
+  withoutReviewSessionLink,
+  type SessionMetadataRecord,
+} from "@/lib/sessionReviewMetadata"
 import { sessionEvents } from "@/lib/sessionEvents"
 
 const MESSAGE_REFETCH_LIMIT = 200
@@ -386,6 +393,25 @@ function ascendingId(prefix: string): string {
   }
 
   return `${prefix}_${hex}${rand}`
+}
+
+// ---------------------------------------------------------------------------
+// Review metadata helpers
+// ---------------------------------------------------------------------------
+
+export async function patchSessionMetadata(
+  sessionId: string,
+  directory: string | null | undefined,
+  updater: (metadata: SessionMetadataRecord) => SessionMetadataRecord,
+): Promise<Session> {
+  const targetDirectory = directory ?? getSessionDirectory(sessionId)
+  const current = await opencodeClient.getSession(sessionId, targetDirectory)
+  const nextMetadata = updater(getSessionMetadata(current))
+  const updated = await opencodeClient.updateSession(sessionId, { metadata: nextMetadata }, targetDirectory)
+  useGlobalSessionsStore.getState().upsertSession(updated)
+  const sessionDirectory = (updated as { directory?: string | null }).directory ?? targetDirectory
+  if (sessionDirectory) registerSessionDirectory(updated.id, sessionDirectory)
+  return updated
 }
 
 /**

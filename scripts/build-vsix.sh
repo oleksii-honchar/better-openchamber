@@ -3,12 +3,15 @@
 # Usage: ./scripts/build-vsix.sh [--vsix-name <name>] [--vsix-version <version>]
 # Output: ./dist/<name>-<version>.vsix (relative to repo root)
 #
+# The default version is derived from packages/vscode/package.json
+# and suffixed with -local-<short-sha> (e.g. 1.12.4-local-f61c70f5).
+#
 # Examples:
-#   # Default: ./dist/openchamber-1.11.2-local-<sha>.vsix
+#   # Default: ./dist/openchamber-<version-from-pkgjson>-local-<sha>.vsix
 #   ./scripts/build-vsix.sh
 #
 #   # Custom version
-#   ./scripts/build-vsix.sh --vsix-version "1.11.2-editable-subagents"
+#   ./scripts/build-vsix.sh --vsix-version "1.12.4-editable-subagents"
 #
 #   # Custom output dir (overrides default)
 #   ./scripts/build-vsix.sh --output-dir ~/Downloads
@@ -16,7 +19,7 @@
 set -e
 
 VSIX_NAME="openchamber"
-VSIX_VERSION="1.11.2-local-$(git rev-parse --short HEAD)"
+VSIX_VERSION_OVERRIDE=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -25,7 +28,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --vsix-version)
-      VSIX_VERSION="$2"
+      VSIX_VERSION_OVERRIDE="$2"
       shift 2
       ;;
     --output-dir|--output)
@@ -49,6 +52,14 @@ OUTPUT_DIR="${OUTPUT_DIR:=$REPO_ROOT/dist}"
 if [ ! -f package.json ]; then
   echo "ERROR: Not in repo root with package.json at $REPO_ROOT" >&2
   exit 1
+fi
+
+# Derive version from packages/vscode/package.json (unless explicitly overridden)
+if [ -n "$VSIX_VERSION_OVERRIDE" ]; then
+  VSIX_VERSION="$VSIX_VERSION_OVERRIDE"
+else
+  BASE_VERSION=$(jq -r '.version' packages/vscode/package.json)
+  VSIX_VERSION="${BASE_VERSION}-local-$(git rev-parse --short HEAD)"
 fi
 
 echo "[BUILD] Building VSIX extension..."
