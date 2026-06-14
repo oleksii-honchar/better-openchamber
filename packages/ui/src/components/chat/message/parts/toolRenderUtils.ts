@@ -9,6 +9,8 @@ const STANDALONE_TOOL_NAMES = new Set<string>(['task']);
 
 const SEARCH_TOOL_NAMES = new Set<string>(['grep', 'search', 'find', 'ripgrep', 'glob']);
 
+const META_TOOL_NAMES = new Set<string>(['skill_search', 'tool_search', 'tool_use']);
+
 const normalizeToolName = (toolName: unknown): string => {
     if (typeof toolName !== 'string') return '';
     const trimmed = toolName.trim().toLowerCase();
@@ -33,6 +35,10 @@ export const isStandaloneTool = (toolName: unknown): boolean => {
 export const isStaticTool = (toolName: unknown): boolean => {
     if (typeof toolName !== 'string') return false;
     return !isExpandableTool(toolName) && !isStandaloneTool(toolName);
+};
+
+export const isMetaTool = (toolName: unknown): boolean => {
+    return META_TOOL_NAMES.has(normalizeToolName(toolName));
 };
 
 export const getStaticGroupToolName = (toolName: string): string => {

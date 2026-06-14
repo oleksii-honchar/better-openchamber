@@ -40,7 +40,8 @@ import { Icon } from "@/components/icon/Icon";
 import { formatTimestampForDisplay } from './timeFormat';
 import { ToolRevealOnMount } from './parts/ToolRevealOnMount';
 import { StaticToolRow } from './parts/ProgressiveGroup';
-import { isExpandableTool, isStandaloneTool } from './parts/toolRenderUtils';
+import { MetaToolPart } from './parts/MetaToolPart';
+import { isExpandableTool, isMetaTool, isStandaloneTool } from './parts/toolRenderUtils';
 import TurnActivity from '../components/TurnActivity';
 import { createProjectPlanFile } from '@/lib/openchamberConfig';
 import { resolveProjectForSessionDirectory } from '@/lib/projectResolution';
@@ -1800,6 +1801,25 @@ const AssistantMessageBody = React.memo(({
                                     onContentChange={onContentChange}
                                     onShowPopup={onShowPopup}
                                     animateTailText={animatedToolIdsLookup.has(toolPart.id)}
+                                />
+                            </ToolRevealOnMount>
+                        </FadeInOnReveal>
+                    );
+                    i++;
+                    continue;
+                }
+
+                // Meta tools: skill_search, tool_search, tool_use — collapsible blocks
+                if (isMetaTool(toolName)) {
+                    rendered.push(
+                        <FadeInOnReveal key={`meta-tool-${toolPart.id}`}>
+                            <ToolRevealOnMount animate={animatedToolIdsLookup.has(toolPart.id)} wipe>
+                                <MetaToolPart
+                                    part={toolPart}
+                                    isExpanded={expandedTools.has(toolPart.id)}
+                                    onToggle={onToggleTool}
+                                    syntaxTheme={syntaxTheme}
+                                    onContentChange={onContentChange}
                                 />
                             </ToolRevealOnMount>
                         </FadeInOnReveal>

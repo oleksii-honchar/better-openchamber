@@ -741,9 +741,12 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
         get().resolvePendingDraftWorktreeTarget(draft.pendingWorktreeRequestId, draftDirectoryOverride)
       }
 
-      const wsFolders = (window as unknown as { __VSCODE_CONFIG__?: { workspaceFolders?: string[] } }).__VSCODE_CONFIG__?.workspaceFolders
+      // workspaceFolders in __VSCODE_CONFIG__ are WorkspaceFolderCandidate objects ({ name, path }),
+      // but the SDK's session.create expects Array<string> (directory paths).
+      const wsFoldersRaw = (window as unknown as { __VSCODE_CONFIG__?: { workspaceFolders?: Array<{ name: string; path: string }> } }).__VSCODE_CONFIG__?.workspaceFolders
+      const wsFolders = wsFoldersRaw?.map((wf) => wf.path).filter((p): p is string => Boolean(p)) ?? null
       console.log('[Openchamber] createSession: workspaceFolders from __VSCODE_CONFIG__', wsFolders, 'directoryOverride:', draftDirectoryOverride)
-      const created = await get().createSession(draft.title, draftDirectoryOverride, draft.parentID ?? null, wsFolders ?? null)
+      const created = await get().createSession(draft.title, draftDirectoryOverride, draft.parentID ?? null, wsFolders)
       if (!created?.id) throw new Error("Failed to create session")
 
       persistDraftTarget({
@@ -1120,7 +1123,10 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
       (sid) => get().worktreeMetadata.get(sid),
     )
 
-    const wsFolders = (window as unknown as { __VSCODE_CONFIG__?: { workspaceFolders?: string[] } }).__VSCODE_CONFIG__?.workspaceFolders
+    // workspaceFolders in __VSCODE_CONFIG__ are WorkspaceFolderCandidate objects ({ name, path }),
+    // but the SDK's session.create expects Array<string> (directory paths).
+    const wsFoldersRaw = (window as unknown as { __VSCODE_CONFIG__?: { workspaceFolders?: Array<{ name: string; path: string }> } }).__VSCODE_CONFIG__?.workspaceFolders
+    const wsFolders = wsFoldersRaw?.map((wf) => wf.path).filter((p): p is string => Boolean(p)) ?? null
     const session = await get().createSession(undefined, directory ?? null, null, wsFolders)
     if (!session) return
 

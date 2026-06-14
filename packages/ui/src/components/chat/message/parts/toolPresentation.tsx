@@ -68,6 +68,12 @@ export const getToolIcon = (toolName: string) => {
     if (tool === 'invalid') {
         return <Icon name="alert-circle" className={iconClass} style={{ color: 'var(--status-error)' }} />;
     }
+    if (tool === 'skill_search' || tool === 'tool_search') {
+        return <Icon name="search" className={iconClass} />;
+    }
+    if (tool === 'tool_use') {
+        return <Icon name="arrow-right" className={iconClass} />;
+    }
     if (tool.startsWith('git')) {
         return <Icon name="git-branch" className={iconClass} />;
     }

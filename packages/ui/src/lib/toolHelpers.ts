@@ -223,6 +223,34 @@ export const TOOL_METADATA: Record<string, ToolMetadata> = {
         { key: 'tool', label: 'Called Tool', type: 'text' },
         { key: 'error', label: 'Error', type: 'text' },
       ]
+    },
+
+    skill_search: {
+      displayName: 'Skill Search',
+      category: 'ai',
+      outputLanguage: 'text',
+      inputFields: [
+        { key: 'query', label: 'Query', type: 'text' },
+      ]
+    },
+
+    tool_search: {
+      displayName: 'Tool Search',
+      category: 'ai',
+      outputLanguage: 'text',
+      inputFields: [
+        { key: 'query', label: 'Query', type: 'text' },
+      ]
+    },
+
+    tool_use: {
+      displayName: 'Tool Use',
+      category: 'ai',
+      outputLanguage: 'text',
+      inputFields: [
+        { key: 'tool', label: 'Tool', type: 'text' },
+        { key: 'args', label: 'Arguments', type: 'code', language: 'json' },
+      ]
     }
   };
 

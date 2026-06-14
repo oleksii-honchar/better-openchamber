@@ -199,10 +199,15 @@ export async function createSession(
   parentID?: string | null,
   workspaceFolders?: string[] | null,
 ): Promise<Session | null> {
+  const directory = directoryOverride ?? dir()
+  if (!directory) {
+    console.error('[session-actions] createSession: no directory available — cannot create session')
+    return null
+  }
   try {
-    console.log('[Openchamber] SDK session.create:', { directory: directoryOverride ?? dir(), title, parentID, workspaceFolders })
+    console.log('[Openchamber] SDK session.create:', { directory, title, parentID, workspaceFolders })
     const result = await sdk().session.create({
-      directory: directoryOverride ?? dir(),
+      directory,
       title,
       parentID: parentID ?? undefined,
       workspaceFolders,

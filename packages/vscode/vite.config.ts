@@ -48,6 +48,18 @@ export default defineConfig(({ mode }) => ({
   },
   optimizeDeps: {
     include: ['@opencode-ai/sdk/v2'],
+    /**
+     * Force Vite's dependency pre-bundling to use the local Better Open Code SDK
+     * instead of the npm-published SDK. The Vite alias resolves @opencode-ai/sdk/v2
+     * to this local file, but optimizeDeps may pre-bundle from node_modules before
+     * the alias resolves. Explicitly including the resolved file path ensures the
+     * local SDK is used for both type resolution and runtime.
+     */
+    esbuildOptions: {
+      alias: {
+        '@opencode-ai/sdk': path.resolve(__dirname, '../../../better-opencode/packages/sdk/js/dist'),
+      },
+    },
   },
   build: {
     outDir: path.resolve(__dirname, 'dist/webview'),
