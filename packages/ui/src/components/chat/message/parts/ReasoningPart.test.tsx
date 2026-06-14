@@ -62,6 +62,22 @@ describe('ReasoningTimelineBlock', () => {
     expect(markup).not.toContain('Thinking');
   });
 
+  test('renders data-testid="reasoning-block" on ScrollableOverlay when expanded', () => {
+    const markup = renderToStaticMarkup(
+      <I18nProvider>
+        <ReasoningTimelineBlock
+          text={LONG_REASONING}
+          variant="thinking"
+          blockId="reasoning-test"
+          showDuration={false}
+          defaultExpanded={true}
+        />
+      </I18nProvider>,
+    );
+
+    expect(markup).toContain('data-testid="reasoning-block"');
+  });
+
   test('renders "Thinking" label for thinking variant when pre-expanded and not streaming', () => {
     const markup = renderToStaticMarkup(
       <I18nProvider>

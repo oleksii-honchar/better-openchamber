@@ -5,6 +5,7 @@ import { useUIStore } from '@/stores/useUIStore';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { Icon } from '@/components/icon/Icon';
 import { useI18n } from '@/lib/i18n';
+import { TEST_IDS } from '@/lib/test-ids';
 import type { Snippet } from '@/types/snippet';
 
 export interface SnippetAutocompleteHandle {
@@ -121,7 +122,7 @@ export const SnippetAutocomplete = React.forwardRef<SnippetAutocompleteHandle, S
 
   return (
     <div ref={containerRef} className="absolute z-[100] min-w-0 w-full max-w-[450px] max-h-60 bg-background border-2 border-border/60 rounded-xl shadow-none bottom-full mb-2 left-0 flex flex-col" style={style}>
-      <ScrollableOverlay outerClassName="flex-1 min-h-0" className="px-0 pb-2">
+      <ScrollableOverlay outerClassName="flex-1 min-h-0" className="px-0 pb-2" data-testid={TEST_IDS.AUTOCOMPLETE.SNIPPET}>
         <div
           ref={(el) => { itemRefs.current[0] = el; }}
           className={cn('flex items-center gap-2 px-3 py-1.5 cursor-pointer rounded-lg typography-ui-label', selectedIndex === 0 && 'bg-interactive-selection')}

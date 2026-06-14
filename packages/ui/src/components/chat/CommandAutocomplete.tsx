@@ -7,6 +7,7 @@ import { useSkillsStore } from '@/stores/useSkillsStore';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { Icon } from "@/components/icon/Icon";
 import { useI18n } from '@/lib/i18n';
+import { TEST_IDS } from '@/lib/test-ids';
 import { useUIStore } from '@/stores/useUIStore';
 import { isVSCodeRuntime } from '@/lib/desktop';
 
@@ -348,7 +349,7 @@ export const CommandAutocomplete = React.forwardRef<CommandAutocompleteHandle, C
       className="absolute z-[100] min-w-0 w-full max-w-[450px] max-h-64 bg-background border-2 border-border/60 rounded-xl shadow-none bottom-full mb-2 left-0 flex flex-col"
       style={style}
     >
-      <ScrollableOverlay outerClassName="flex-1 min-h-0" className="px-0 pb-2">
+      <ScrollableOverlay outerClassName="flex-1 min-h-0" className="px-0 pb-2" data-testid={TEST_IDS.AUTOCOMPLETE.COMMAND}>
         {loading ? (
           <div className="flex items-center justify-center py-4">
             <Icon name="refresh" className="h-4 w-4 animate-spin text-muted-foreground" />

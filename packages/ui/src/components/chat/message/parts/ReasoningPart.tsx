@@ -11,6 +11,7 @@ import { useUIStore } from '@/stores/useUIStore';
 import { MarkdownRenderer } from '../../MarkdownRenderer';
 import { useStreamingTextThrottle } from '../../hooks/useStreamingTextThrottle';
 import type { StreamPhase } from '../types';
+import { TEST_IDS } from '@/lib/test-ids';
 
 const TOOL_ROW_TEXT_CLASS = '!text-[length:var(--text-meta)] !leading-4 sm:!leading-6 tracking-normal';
 const TOOL_ROW_TITLE_CLASS = cn('typography-meta font-medium', TOOL_ROW_TEXT_CLASS);
@@ -387,6 +388,7 @@ export const ReasoningTimelineBlock: React.FC<ReasoningTimelineBlockProps> = ({
                             useScrollShadow
                             scrollShadowSize={36}
                             userIntentOnly
+                            data-testid={TEST_IDS.CHAT.REASONING}
                         >
                             <div data-message-text-export-source="true">
                                 <MarkdownRenderer

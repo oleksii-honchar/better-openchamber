@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { Icon } from '@/components/icon/Icon';
 import { BusyDots } from './BusyDots';
+import { TEST_IDS } from '@/lib/test-ids';
 import { getToolIcon } from './toolPresentation';
 import { getToolMetadata } from '@/lib/toolHelpers';
 
@@ -114,8 +115,17 @@ export const MetaToolPart: React.FC<MetaToolPartProps> = ({
     const contentMountedRef = React.useRef(false);
 
     // Metadata
-    const { displayName } = React.useMemo(() => getToolMetadata(toolName), [toolName]);
-    const icon = React.useMemo(() => getToolIcon(toolName), [toolName]);
+    const resolvedToolName = React.useMemo(() => {
+        if (toolName === 'tool_use' && state?.input) {
+            const inp = state.input as Record<string, unknown>;
+            const innerName = (inp.name as string) || (inp.tool as string);
+            if (innerName) return innerName;
+        }
+        return toolName;
+    }, [toolName, state]);
+
+    const { displayName } = React.useMemo(() => getToolMetadata(resolvedToolName), [resolvedToolName]);
+    const icon = React.useMemo(() => getToolIcon(resolvedToolName), [resolvedToolName]);
 
     // Summary
     const summary = React.useMemo(() => {
@@ -380,6 +390,7 @@ export const MetaToolPart: React.FC<MetaToolPartProps> = ({
                                 useScrollShadow
                                 scrollShadowSize={36}
                                 userIntentOnly
+                                data-testid={TEST_IDS.CHAT.TOOL_PART}
                             >
                                 {runningInput && Object.keys(runningInput).length > 0 ? (
                                     <div className="px-3 py-2">
@@ -507,6 +518,7 @@ export const MetaToolPart: React.FC<MetaToolPartProps> = ({
                                 useScrollShadow
                                 scrollShadowSize={36}
                                 userIntentOnly
+                                data-testid={TEST_IDS.CHAT.TOOL_PART}
                             >
                                 {formattedInput ? (
                                     <div className="px-3 py-2">
@@ -639,6 +651,7 @@ export const MetaToolPart: React.FC<MetaToolPartProps> = ({
                                 useScrollShadow
                                 scrollShadowSize={36}
                                 userIntentOnly
+                                data-testid={TEST_IDS.CHAT.TOOL_PART}
                             >
                                 {formattedInput ? (
                                     <div className="px-3 py-2">

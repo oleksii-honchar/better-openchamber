@@ -2,6 +2,7 @@ import React from 'react';
 
 import type { ChatMessageEntry, Turn } from '../lib/turns/types';
 import TurnAssistantBlock from './TurnAssistantBlock';
+import { TEST_IDS } from '@/lib/test-ids';
 
 interface TurnItemProps {
     turn: Turn;
@@ -16,6 +17,7 @@ const TurnItem: React.FC<TurnItemProps> = ({ turn, stickyUserHeader = true, rend
             id={`turn-${turn.turnId}`}
             data-turn-id={turn.turnId}
             data-scroll-spy-id={turn.turnId}
+            data-testid={`${TEST_IDS.CHAT.TURN}-${turn.turnId}`}
         >
             {stickyUserHeader ? (
                 <div className="sticky top-0 z-20 relative bg-[var(--surface-background)] [overflow-anchor:none]">

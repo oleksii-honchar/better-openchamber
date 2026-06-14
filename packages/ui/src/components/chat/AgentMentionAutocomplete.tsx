@@ -4,6 +4,7 @@ import { useConfigStore } from '@/stores/useConfigStore';
 import { useAgentsStore, isAgentBuiltIn, type AgentWithExtras } from '@/stores/useAgentsStore';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { useI18n } from '@/lib/i18n';
+import { TEST_IDS } from '@/lib/test-ids';
 
 interface AgentInfo {
   name: string;
@@ -235,7 +236,7 @@ export const AgentMentionAutocomplete = React.forwardRef<AgentMentionAutocomplet
           </div>
         </div>
       ) : null}
-      <ScrollableOverlay outerClassName="flex-1 min-h-0" className="px-0 pb-2">
+      <ScrollableOverlay outerClassName="flex-1 min-h-0" className="px-0 pb-2" data-testid={TEST_IDS.AUTOCOMPLETE.AGENT}>
         {agents.length ? (
           <div>
             {agents.map((agent, index) => renderAgent(agent, index))}

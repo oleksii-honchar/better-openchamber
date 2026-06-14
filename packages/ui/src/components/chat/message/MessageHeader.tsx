@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { getAgentColor } from '@/lib/agentColors';
 import { useProviderLogo } from '@/hooks/useProviderLogo';
 import { Icon } from "@/components/icon/Icon";
+import { TEST_IDS } from '@/lib/test-ids';
 
 interface MessageHeaderProps {
     isUser: boolean;
@@ -17,7 +18,7 @@ const MessageHeader: React.FC<MessageHeaderProps> = ({ isUser, providerID, agent
     const { src: logoSrc, onError: handleLogoError, hasLogo } = useProviderLogo(providerID);
 
     return (
-        <div className={cn('mb-2')}>
+        <div className={cn('mb-2')} data-testid={TEST_IDS.CHAT.MESSAGE_HEADER}>
             <div className={cn('flex items-center justify-between gap-2')}>
                 <div className="flex items-center gap-2">
                     <div className="flex-shrink-0">

@@ -11,6 +11,7 @@ import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { Icon } from "@/components/icon/Icon";
 import { DiffPreview, WritePreview } from './DiffPreview';
 import { useI18n } from '@/lib/i18n';
+import { TEST_IDS } from '@/lib/test-ids';
 
 const PERMISSION_BASH_CUSTOM_STYLE: React.CSSProperties = {
   margin: 0,
@@ -197,7 +198,7 @@ export const PermissionCard: React.FC<PermissionCardProps> = ({
             </div>
           )}
           {changes && (
-            <ScrollableOverlay outerClassName="max-h-[60vh]" className="tool-output-surface p-1 rounded-xl border border-border/20 bg-transparent">
+            <ScrollableOverlay outerClassName="max-h-[60vh]" className="tool-output-surface p-1 rounded-xl border border-border/20 bg-transparent" data-testid={TEST_IDS.CHAT.TOOL_PART}>
               <DiffPreview diff={changes} syntaxTheme={syntaxTheme} filePath={filePath} />
             </ScrollableOverlay>
           )}
@@ -211,7 +212,7 @@ export const PermissionCard: React.FC<PermissionCardProps> = ({
 
       if (content) {
         return (
-          <ScrollableOverlay outerClassName="max-h-[60vh]" className="tool-output-surface p-1 rounded-xl border border-border/20 bg-transparent">
+          <ScrollableOverlay outerClassName="max-h-[60vh]" className="tool-output-surface p-1 rounded-xl border border-border/20 bg-transparent" data-testid={TEST_IDS.CHAT.TOOL_PART}>
             <WritePreview content={content} syntaxTheme={syntaxTheme} filePath={filePath} />
           </ScrollableOverlay>
         );
@@ -246,7 +247,7 @@ export const PermissionCard: React.FC<PermissionCardProps> = ({
           {headers && Object.keys(headers).length > 0 && (
             <div className="mb-2">
               <div className="typography-meta text-muted-foreground mb-1">{t('chat.permissionCard.headers')}</div>
-              <ScrollableOverlay outerClassName="max-h-24" className="p-0">
+              <ScrollableOverlay outerClassName="max-h-24" className="p-0" data-testid={TEST_IDS.CHAT.TOOL_PART}>
                 <SyntaxHighlighter
                   language="json"
                   style={syntaxTheme}
@@ -261,7 +262,7 @@ export const PermissionCard: React.FC<PermissionCardProps> = ({
           {body && (
             <div className="mb-2">
               <div className="typography-meta text-muted-foreground mb-1">{t('chat.permissionCard.body')}</div>
-              <ScrollableOverlay outerClassName="max-h-32" className="p-0">
+              <ScrollableOverlay outerClassName="max-h-32" className="p-0" data-testid={TEST_IDS.CHAT.TOOL_PART}>
                 <SyntaxHighlighter
                   language={typeof body === 'object' ? 'json' : 'text'}
                   style={syntaxTheme}
@@ -295,7 +296,7 @@ export const PermissionCard: React.FC<PermissionCardProps> = ({
         {genericContent && (
           <div className="mb-2">
             <div className="typography-meta text-muted-foreground mb-1">{t('chat.permissionCard.action')}</div>
-            <ScrollableOverlay outerClassName="max-h-32" className="p-0">
+            <ScrollableOverlay outerClassName="max-h-32" className="p-0" data-testid={TEST_IDS.CHAT.TOOL_PART}>
               <pre className="typography-meta font-mono px-2 py-1 bg-muted/30 rounded whitespace-pre-wrap break-all">
                 {String(genericContent)}
               </pre>
@@ -306,7 +307,7 @@ export const PermissionCard: React.FC<PermissionCardProps> = ({
         {Object.keys(permission.metadata).length > 0 && !genericContent && !description && (
           <div>
             <div className="typography-meta text-muted-foreground mb-1">{t('chat.permissionCard.details')}</div>
-            <ScrollableOverlay outerClassName="max-h-32" className="p-0">
+            <ScrollableOverlay outerClassName="max-h-32" className="p-0" data-testid={TEST_IDS.CHAT.TOOL_PART}>
               <pre className="typography-meta font-mono px-2 py-1 bg-muted/30 rounded whitespace-pre-wrap break-all">
                 {JSON.stringify(permission.metadata, null, 2)}
               </pre>

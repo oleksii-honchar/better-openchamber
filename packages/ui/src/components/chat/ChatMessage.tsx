@@ -14,6 +14,7 @@ import { useDeviceInfo } from '@/lib/device';
 import { useThemeSystem } from '@/contexts/useThemeSystem';
 import { generateSyntaxTheme } from '@/lib/theme/syntaxThemeGenerator';
 import { cn } from '@/lib/utils';
+import { TEST_IDS } from '@/lib/test-ids';
 
 import type { AnimationHandlers, ContentChangeReason } from '@/hooks/useChatAutoFollow';
 import MessageHeader from './message/MessageHeader';
@@ -999,6 +1000,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
                 )}
                 id={`message-${message.info.id}`}
                 data-message-id={message.info.id}
+                data-testid={TEST_IDS.CHAT.MESSAGE}
                 ref={messageContainerRef}
             >
                 <div className="chat-message-column relative">

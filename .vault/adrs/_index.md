@@ -21,3 +21,4 @@ Architecture decisions for the better-openchamber fork, including forking strate
 - [[0004-esbuild-options-alias-sdk.adr]] — **ADR-0004 (accepted):** Use `esbuildOptions.alias` to force Vite's pre-bundler to resolve the local Better Open Code SDK
 - [[0005-validate-directory-before-sdk.adr]] — **ADR-0005 (accepted):** Validate `directory` before SDK call to prevent `?directory=undefined` IPC failure
 - [[0006-extract-workspace-folders-paths.adr]] — **ADR-0006 (accepted):** Extract `path` from `WorkspaceFolderCandidate[]` for type-safe SDK integration
+- [[0007-skip-workspace-prompt.adr]] — **ADR-0007 (accepted):** Add `skipWorkspacePrompt` boolean setting to auto-select first workspace folder instead of showing QuickPick

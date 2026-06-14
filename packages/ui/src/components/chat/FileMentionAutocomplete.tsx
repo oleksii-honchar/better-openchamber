@@ -12,6 +12,7 @@ import { Icon } from "@/components/icon/Icon";
 import { useDirectoryShowHidden } from '@/lib/directoryShowHidden';
 import { useFilesViewShowGitignored } from '@/lib/filesViewShowGitignored';
 import { useI18n } from '@/lib/i18n';
+import { TEST_IDS } from '@/lib/test-ids';
 
 type FileInfo = ProjectFileSearchHit;
 type AgentInfo = {
@@ -444,7 +445,7 @@ export const FileMentionAutocomplete = React.forwardRef<FileMentionHandle, FileM
         className="absolute z-[100] min-w-0 w-full max-w-[640px] max-h-64 bg-background border-2 border-border/60 rounded-xl shadow-none bottom-full mb-2 left-0 flex flex-col"
         style={style}
       >
-        <ScrollableOverlay outerClassName="flex-1 min-h-0" className="px-0">
+        <ScrollableOverlay outerClassName="flex-1 min-h-0" className="px-0" data-testid={TEST_IDS.AUTOCOMPLETE.FILE}>
         {loading ? (
           <div className="flex items-center justify-center py-4">
             <Icon name="refresh" className="h-4 w-4 animate-spin text-muted-foreground" />

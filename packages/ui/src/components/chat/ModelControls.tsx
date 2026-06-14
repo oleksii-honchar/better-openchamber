@@ -37,6 +37,7 @@ import { useModelLists } from '@/hooks/useModelLists';
 import { useIsTextTruncated } from '@/hooks/useIsTextTruncated';
 import { formatEffortLabel, getCycledPrimaryAgentName, type MobileControlsPanel } from './mobileControlsUtils';
 import { getCurrentIntlLocale, useI18n } from '@/lib/i18n';
+import { TEST_IDS } from '@/lib/test-ids';
 import { useOpenCodeReadiness } from '@/hooks/useOpenCodeReadiness';
 import { eventMatchesShortcut, getEffectiveShortcutCombo, normalizeCombo } from '@/lib/shortcuts';
 import { markStartupTrace } from '@/lib/startupTrace';
@@ -2722,7 +2723,7 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                                         />
                                     </div>
                                 </div>
-                                <ScrollableOverlay outerClassName="max-h-[min(400px,calc(100dvh-12rem))] flex-1">
+                                <ScrollableOverlay outerClassName="max-h-[min(400px,calc(100dvh-12rem))] flex-1" data-testid={TEST_IDS.CHAT.CONTAINER}>
                                     <div className="p-1">
                                         {!agentSearchQuery.trim() && defaultAgentName && (
                                             <>

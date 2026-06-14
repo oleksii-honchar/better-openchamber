@@ -2,6 +2,7 @@ import React from 'react';
 import { cn, fuzzyMatch } from '@/lib/utils';
 import { useSkillsStore } from '@/stores/useSkillsStore';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
+import { TEST_IDS } from '@/lib/test-ids';
 
 interface SkillInfo {
   name: string;
@@ -168,7 +169,7 @@ export const SkillAutocomplete = React.forwardRef<SkillAutocompleteHandle, Skill
       className="absolute z-[100] min-w-0 w-full max-w-[450px] max-h-60 bg-background border-2 border-border/60 rounded-xl shadow-none bottom-full mb-2 left-0 flex flex-col"
       style={style}
     >
-      <ScrollableOverlay outerClassName="flex-1 min-h-0" className="px-0 pb-2">
+      <ScrollableOverlay outerClassName="flex-1 min-h-0" className="px-0 pb-2" data-testid={TEST_IDS.AUTOCOMPLETE.SKILL}>
         {filteredSkills.length ? (
           <div>
             {filteredSkills.map((skill, index) => renderSkill(skill, index))}
