@@ -81,7 +81,7 @@ export function SidebarProjectsList(props: Props): React.ReactNode {
 
   if (props.sharedSessionsOnly) {
     return (
-      <ScrollableOverlay data-testid={TEST_IDS.SIDEBAR.PROJECTS_LIST} useScrollShadow scrollShadowSize={96} outerClassName="flex-1 min-h-0" className={cn('space-y-1 pb-1 pr-2', props.mobileVariant ? '' : '')}>
+      <ScrollableOverlay data-testid={TEST_IDS.SIDEBAR.PROJECTS_LIST} useScrollShadow scrollShadowSize={96} outerClassName="flex-1 min-h-0" className={cn('space-y-1 pb-1', props.mobileVariant ? '' : '')}>
         {props.topContent}
         {!props.hasSharedSessions ? (props.hasSessionSearchQuery ? props.searchEmptyState : props.emptyState) : null}
       </ScrollableOverlay>

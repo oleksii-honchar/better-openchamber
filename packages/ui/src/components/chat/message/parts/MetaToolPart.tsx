@@ -129,9 +129,17 @@ export const MetaToolPart: React.FC<MetaToolPartProps> = ({
     // Summary
     const summary = React.useMemo(() => {
         if (status === 'error') return (state as { error: string }).error || '';
-        if (status === 'completed') return getMetaToolSummary((state as { output: string }).output || '');
+        if (status === 'completed') {
+            // tool_search: show the query in collapsed state
+            if (toolName === 'tool_search') {
+                const inp = (state as { input: Record<string, unknown> }).input;
+                const query = inp?.query as string | undefined;
+                if (query) return `Search "${query}"`;
+            }
+            return getMetaToolSummary((state as { output: string }).output || '');
+        }
         return '';
-    }, [status, state]);
+    }, [status, state, toolName]);
 
     // Duration
     const duration = React.useMemo(() => {

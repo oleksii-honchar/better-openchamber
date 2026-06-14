@@ -284,6 +284,30 @@ describe('MetaToolPart', () => {
         expect(markup).toContain('Tool Use');
     });
 
+    test('tool_search: shows query in collapsed state instead of output', () => {
+        const part = completedPart({
+            tool: 'tool_search',
+            state: {
+                status: 'completed',
+                input: { query: 'billing calculation' },
+                output: 'Found 3 matching skills with relevance scores and descriptions',
+                title: 'Tool Search',
+                time: { start: 1000000, end: 1000500 },
+            },
+        });
+
+        const markup = renderToStaticMarkup(
+            <I18nProvider>
+                <MetaToolPart part={part} />
+            </I18nProvider>,
+        );
+
+        // Shows the query in collapsed state
+        expect(markup).toContain('Search &quot;billing calculation&quot;');
+        // Must NOT show the output summary
+        expect(markup).not.toContain('Found 3 matching');
+    });
+
     test('renders arrow-right icon for tool_use — does NOT resolve inner tool icon', () => {
         const part = completedPart({
             tool: 'tool_use',

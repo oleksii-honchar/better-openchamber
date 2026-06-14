@@ -928,7 +928,7 @@ function SessionNodeItemComponent(props: Props): React.ReactNode {
                 data-session-scope={sessionDirectory ?? ''}
                 data-session-archived={archivedBucket ? '1' : '0'}
                 className={cn(
-                  'group relative my-0.5 flex items-center rounded-sm px-1.5 py-1',
+                  'group relative my-0.5 flex items-center rounded-sm px-1.5 py-1 ml-3',
                   isMissingDirectory ? 'opacity-75' : '',
                   depth > 0 && 'pl-[20px]',
                   isRowSelected && 'bg-primary/15',

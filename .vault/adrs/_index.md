@@ -2,13 +2,13 @@
 type: index
 title: "Architecture Decision Records"
 createdAt: "2026-06-12T14:30:00Z"
-updatedAt: "2026-06-14T16:00:00Z"
+updatedAt: "2026-06-14T17:50:00Z"
 tags: []
 ---
 
 # Architecture Decision Records
 
-Architecture decisions for the better-openchamber fork, including forking strategy, feature flag architecture, workspace folder approach, tool rendering decisions, and SDK integration.
+Architecture decisions for the better-openchamber fork, including forking strategy, SDK integration, workspace folder approach, and UI rendering conventions.
 
 ## Nodes
 
@@ -22,3 +22,6 @@ Architecture decisions for the better-openchamber fork, including forking strate
 - [[0005-validate-directory-before-sdk.adr]] — **ADR-0005 (accepted):** Validate `directory` before SDK call to prevent `?directory=undefined` IPC failure
 - [[0006-extract-workspace-folders-paths.adr]] — **ADR-0006 (accepted):** Extract `path` from `WorkspaceFolderCandidate[]` for type-safe SDK integration
 - [[0007-skip-workspace-prompt.adr]] — **ADR-0007 (accepted):** Add `skipWorkspacePrompt` boolean setting to auto-select first workspace folder instead of showing QuickPick
+
+### UI & Rendering
+- [[0008-tool-use-log-format.adr]] — **ADR-0008 (accepted):** Format `tool_use` collapsed headers as `Tool Use "<innerName>"` with unchanged `arrow-right` icon
