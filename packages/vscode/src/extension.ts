@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { ChatViewProvider } from './ChatViewProvider';
 import { AgentManagerPanelProvider } from './AgentManagerPanelProvider';
 import { SessionEditorPanelProvider } from './SessionEditorPanelProvider';
-import { createOpenCodeManager, type OpenCodeManager } from './opencode';
+import { createOpenCodeManager, type OpenCodeManager, readOpenChamberSettings } from './opencode';
 import { startGlobalEventWatcher, stopGlobalEventWatcher, setChatViewProvider } from './sessionActivityWatcher';
 import { resolveWorkspaceFolders } from './workspaceResolver';
 
@@ -469,7 +469,8 @@ export async function activate(context: vscode.ExtensionContext) {
       }
 
       if (!folderPath) {
-        folderPath = candidates.length === 1
+        const skipPrompt = (readOpenChamberSettings().skipWorkspacePrompt as boolean | undefined) === true;
+        folderPath = (candidates.length === 1 || skipPrompt)
           ? candidates[0].path
           : (await vscode.window.showQuickPick(
               candidates.map((folder) => ({ label: folder.name, description: folder.path, path: folder.path })),
