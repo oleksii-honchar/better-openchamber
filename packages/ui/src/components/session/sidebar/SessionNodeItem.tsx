@@ -564,8 +564,8 @@ function SessionNodeItemComponent(props: Props): React.ReactNode {
     <span
       className={cn(
         'pointer-events-none absolute inline-flex h-3.5 items-center justify-center gap-0.5 transition-opacity',
-        isMinimalMode ? 'top-1/2 -translate-y-1/2' : 'top-[14.5px] -translate-y-1/2',
-        showStatusMarker && isPinnedSession ? 'left-[-18px] w-6' : 'left-[-10px] w-3.5',
+        isMinimalMode ? 'top-1/2 -translate-y-1/2' : 'top-[13px] -translate-y-1/2',
+        showStatusMarker && isPinnedSession ? 'left-[-18px] w-6' : 'left-[-7px] w-3.5',
         hasChildren && !alwaysShowActions ? 'opacity-100 group-hover:opacity-0 group-focus-within:opacity-0' : '',
       )}
     >

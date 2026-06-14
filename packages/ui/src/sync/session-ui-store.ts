@@ -758,7 +758,7 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
       await activateConfigForDirectory(draftDirectoryOverride ?? created.directory ?? null)
 
       const configState = useConfigStore.getState()
-      const draftAgentName = configState.currentAgentName
+      const draftAgentName = configState.settingsDefaultAgent ?? configState.currentAgentName
       const effectiveDraftAgent = trimmedAgent ?? draftAgentName
 
       if (configState.currentProviderId && configState.currentModelId) {
