@@ -212,12 +212,12 @@ describe('MetaToolPart', () => {
         expect(markup).toContain('data-testid="tool-part"');
     });
 
-    test('renders tool_use with correct display name from input.tool fallback', () => {
+    test('renders tool_use with display name from input.name — Tool Use "bash"', () => {
         const part = completedPart({
             tool: 'tool_use',
             state: {
                 status: 'completed',
-                input: { tool: 'bash', args: { command: 'ls' } },
+                input: { name: 'bash', args: { command: 'ls' } },
                 output: 'Executed bash',
                 title: 'Tool Use',
                 time: { start: 1000000, end: 1000500 },
@@ -230,12 +230,14 @@ describe('MetaToolPart', () => {
             </I18nProvider>,
         );
 
-        // 'bash' resolves to its metadata display name 'Shell Command'
-        expect(markup).toContain('Shell Command');
-        expect(markup).not.toContain('Tool Use');
+        // Spec: display is `Tool Use "bash"` — the "Tool Use" prefix is the whole point
+        // renderToStaticMarkup HTML-escapes quotes, so we get &quot; in the markup
+        expect(markup).toContain('Tool Use &quot;bash&quot;');
+        // Must NOT resolve inner tool metadata (no "Shell Command")
+        expect(markup).not.toContain('Shell Command');
     });
 
-    test('renders tool_use with display name from input.name convention', () => {
+    test('renders tool_use with display name from input.name — Tool Use "octocode_localGetFileContent"', () => {
         const part = completedPart({
             tool: 'tool_use',
             state: {
@@ -253,9 +255,11 @@ describe('MetaToolPart', () => {
             </I18nProvider>,
         );
 
-        // 'octocode_localGetFileContent' has no metadata, so formatUnknownToolDisplayName
-        // replaces underscores with spaces and capitalizes first letter
-        expect(markup).toContain('Octocode localGetFileContent');
+        // Spec: display is `Tool Use "octocode_localGetFileContent"` — the "Tool Use" prefix is the whole point
+        // renderToStaticMarkup HTML-escapes quotes, so we get &quot; in the markup
+        expect(markup).toContain('Tool Use &quot;octocode_localGetFileContent&quot;');
+        // Must NOT resolve inner tool metadata (no "Octocode localGetFileContent")
+        expect(markup).not.toContain('Octocode localGetFileContent');
     });
 
     test('renders tool_use fallback to "Tool Use" when input has no name or tool', () => {
@@ -280,12 +284,12 @@ describe('MetaToolPart', () => {
         expect(markup).toContain('Tool Use');
     });
 
-    test('renders bash icon for tool_use with input.tool = "bash"', () => {
+    test('renders arrow-right icon for tool_use — does NOT resolve inner tool icon', () => {
         const part = completedPart({
             tool: 'tool_use',
             state: {
                 status: 'completed',
-                input: { tool: 'bash', args: { command: 'ls' } },
+                input: { name: 'bash', args: { command: 'ls' } },
                 output: 'Executed bash',
                 title: 'Tool Use',
                 time: { start: 1000000, end: 1000500 },
@@ -298,9 +302,9 @@ describe('MetaToolPart', () => {
             </I18nProvider>,
         );
 
-        // Should render the bash icon (terminal-box), not the generic tool_use icon (arrow-right)
-        expect(markup).toContain('terminal-box');
-        // The tool_use icon is "arrow-right" — the chevron uses "arrow-right-s" which is always present
-        expect(markup).not.toContain('oc-arrow-right"');
+        // Spec: icon always uses toolName ('tool_use' → arrow-right), does NOT resolve inner tool icon
+        expect(markup).toContain('oc-arrow-right"');
+        // Must NOT resolve inner tool icon (no terminal-box)
+        expect(markup).not.toContain('terminal-box');
     });
 });

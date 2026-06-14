@@ -115,17 +115,16 @@ export const MetaToolPart: React.FC<MetaToolPartProps> = ({
     const contentMountedRef = React.useRef(false);
 
     // Metadata
-    const resolvedToolName = React.useMemo(() => {
-        if (toolName === 'tool_use' && state?.input) {
-            const inp = state.input as Record<string, unknown>;
-            const innerName = (inp.name as string) || (inp.tool as string);
-            if (innerName) return innerName;
+    const displayName = React.useMemo(() => {
+        if (toolName === 'tool_use') {
+            const inp = state?.input as Record<string, unknown> | undefined;
+            const innerName = inp?.name as string | undefined;
+            if (innerName) return `Tool Use "${innerName}"`;
         }
-        return toolName;
+        return getToolMetadata(toolName).displayName;
     }, [toolName, state]);
 
-    const { displayName } = React.useMemo(() => getToolMetadata(resolvedToolName), [resolvedToolName]);
-    const icon = React.useMemo(() => getToolIcon(resolvedToolName), [resolvedToolName]);
+    const icon = React.useMemo(() => getToolIcon(toolName), [toolName]);
 
     // Summary
     const summary = React.useMemo(() => {

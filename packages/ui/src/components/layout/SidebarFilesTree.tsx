@@ -24,6 +24,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
+import { TEST_IDS } from '@/lib/test-ids';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -933,7 +934,7 @@ export const SidebarFilesTree: React.FC = () => {
         </Tooltip>
       </div>
 
-      <ScrollableOverlay outerClassName="flex-1 min-h-0" className="p-2">
+      <ScrollableOverlay data-testid={TEST_IDS.SIDEBAR.FILES_TREE} outerClassName="flex-1 min-h-0" className="p-2">
         <ul className="flex flex-col">
           {searching ? (
             <li className="flex items-center gap-1.5 px-2 py-1 typography-meta text-muted-foreground">

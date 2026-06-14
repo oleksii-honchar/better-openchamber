@@ -15,6 +15,7 @@ import type { DesktopSettings } from '@/lib/desktop';
 import { updateDesktopSettings } from '@/lib/persistence';
 import { useFileSystemAccess } from '@/hooks/useFileSystemAccess';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
+import { TEST_IDS } from '@/lib/test-ids';
 import { Icon } from "@/components/icon/Icon";
 import { useI18n } from '@/lib/i18n';
 import { runtimeFetch } from '@/lib/runtime-fetch';
@@ -1298,7 +1299,7 @@ export const DirectoryTree: React.FC<DirectoryTreeProps> = ({
   if (variant === 'inline') {
     return (
       <div className={cn('overflow-hidden flex flex-col', className)}>
-        <ScrollableOverlay outerClassName="flex-1 min-h-0" className="w-full py-1">
+        <ScrollableOverlay data-testid={TEST_IDS.SIDEBAR.DIRECTORY_TREE} outerClassName="flex-1 min-h-0" className="w-full py-1">
           {directoryContent}
         </ScrollableOverlay>
       </div>
@@ -1326,7 +1327,7 @@ export const DirectoryTree: React.FC<DirectoryTreeProps> = ({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-[350px]">
-        <ScrollableOverlay outerClassName="h-full" className="w-full">
+        <ScrollableOverlay data-testid={TEST_IDS.SIDEBAR.DIRECTORY_TREE_SHARING} outerClassName="h-full" className="w-full">
           {directoryContent}
         </ScrollableOverlay>
       </DropdownMenuContent>
