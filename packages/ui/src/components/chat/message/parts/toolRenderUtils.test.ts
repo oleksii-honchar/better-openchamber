@@ -7,12 +7,12 @@ describe('isMetaTool', () => {
         expect(isMetaTool('skill_search')).toBe(true);
     });
 
-    test('returns true for tool_search', () => {
-        expect(isMetaTool('tool_search')).toBe(true);
+    test('returns true for meta_search', () => {
+        expect(isMetaTool('meta_search')).toBe(true);
     });
 
-    test('returns true for tool_use', () => {
-        expect(isMetaTool('tool_use')).toBe(true);
+    test('returns true for meta_use', () => {
+        expect(isMetaTool('meta_use')).toBe(true);
     });
 
     test('returns false for bash', () => {

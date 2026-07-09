@@ -22,37 +22,37 @@ describe('TOOL_METADATA - meta tools', () => {
         expect(meta.inputFields!.some(f => f.key === 'query')).toBe(true);
     });
 
-    test('tool_search entry exists with correct displayName', () => {
-        const meta = TOOL_METADATA['tool_search'];
+    test('meta_search entry exists with correct displayName', () => {
+        const meta = TOOL_METADATA['meta_search'];
         expect(meta).toBeDefined();
         expect(meta.displayName).toBe('Tool Search');
     });
 
-    test('tool_search entry has category ai', () => {
-        const meta = TOOL_METADATA['tool_search'];
+    test('meta_search entry has category ai', () => {
+        const meta = TOOL_METADATA['meta_search'];
         expect(meta.category).toBe('ai');
     });
 
-    test('tool_search entry has inputFields with query field', () => {
-        const meta = TOOL_METADATA['tool_search'];
+    test('meta_search entry has inputFields with query field', () => {
+        const meta = TOOL_METADATA['meta_search'];
         expect(meta.inputFields).toBeDefined();
         expect(meta.inputFields!.length).toBeGreaterThan(0);
         expect(meta.inputFields!.some(f => f.key === 'query')).toBe(true);
     });
 
-    test('tool_use entry exists with correct displayName', () => {
-        const meta = TOOL_METADATA['tool_use'];
+    test('meta_use entry exists with correct displayName', () => {
+        const meta = TOOL_METADATA['meta_use'];
         expect(meta).toBeDefined();
         expect(meta.displayName).toBe('Tool Use');
     });
 
-    test('tool_use entry has category ai', () => {
-        const meta = TOOL_METADATA['tool_use'];
+    test('meta_use entry has category ai', () => {
+        const meta = TOOL_METADATA['meta_use'];
         expect(meta.category).toBe('ai');
     });
 
-    test('tool_use entry has inputFields with tool and args fields', () => {
-        const meta = TOOL_METADATA['tool_use'];
+    test('meta_use entry has inputFields with tool and args fields', () => {
+        const meta = TOOL_METADATA['meta_use'];
         expect(meta.inputFields).toBeDefined();
         expect(meta.inputFields!.length).toBeGreaterThan(0);
         expect(meta.inputFields!.some(f => f.key === 'tool')).toBe(true);
@@ -94,14 +94,14 @@ describe('getToolMetadata - meta tools', () => {
         expect(meta.category).toBe('ai');
     });
 
-    test('returns correct metadata for tool_search', () => {
-        const meta = getToolMetadata('tool_search');
+    test('returns correct metadata for meta_search', () => {
+        const meta = getToolMetadata('meta_search');
         expect(meta.displayName).toBe('Tool Search');
         expect(meta.category).toBe('ai');
     });
 
-    test('returns correct metadata for tool_use', () => {
-        const meta = getToolMetadata('tool_use');
+    test('returns correct metadata for meta_use', () => {
+        const meta = getToolMetadata('meta_use');
         expect(meta.displayName).toBe('Tool Use');
         expect(meta.category).toBe('ai');
     });

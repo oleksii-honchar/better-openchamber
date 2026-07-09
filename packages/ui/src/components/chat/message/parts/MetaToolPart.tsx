@@ -116,7 +116,7 @@ export const MetaToolPart: React.FC<MetaToolPartProps> = ({
 
     // Metadata
     const displayName = React.useMemo(() => {
-        if (toolName === 'tool_use') {
+        if (toolName === 'meta_use') {
             const inp = state?.input as Record<string, unknown> | undefined;
             const innerName = inp?.name as string | undefined;
             if (innerName) return `Tool Use "${innerName}"`;
@@ -130,8 +130,8 @@ export const MetaToolPart: React.FC<MetaToolPartProps> = ({
     const summary = React.useMemo(() => {
         if (status === 'error') return (state as { error: string }).error || '';
         if (status === 'completed') {
-            // tool_search: show the query in collapsed state
-            if (toolName === 'tool_search') {
+            // meta_search: show the query in collapsed state
+            if (toolName === 'meta_search') {
                 const inp = (state as { input: Record<string, unknown> }).input;
                 const query = inp?.query as string | undefined;
                 if (query) return `Search "${query}"`;

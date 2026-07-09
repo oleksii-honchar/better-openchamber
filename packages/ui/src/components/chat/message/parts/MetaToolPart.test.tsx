@@ -212,9 +212,9 @@ describe('MetaToolPart', () => {
         expect(markup).toContain('data-testid="tool-part"');
     });
 
-    test('renders tool_use with display name from input.name — Tool Use "bash"', () => {
+    test('renders meta_use with display name from input.name — Tool Use "bash"', () => {
         const part = completedPart({
-            tool: 'tool_use',
+            tool: 'meta_use',
             state: {
                 status: 'completed',
                 input: { name: 'bash', args: { command: 'ls' } },
@@ -237,9 +237,9 @@ describe('MetaToolPart', () => {
         expect(markup).not.toContain('Shell Command');
     });
 
-    test('renders tool_use with display name from input.name — Tool Use "octocode_localGetFileContent"', () => {
+    test('renders meta_use with display name from input.name — Tool Use \"octocode_localGetFileContent\"', () => {
         const part = completedPart({
-            tool: 'tool_use',
+            tool: 'meta_use',
             state: {
                 status: 'completed',
                 input: { name: 'octocode_localGetFileContent', args: { path: '/foo' } },
@@ -262,9 +262,9 @@ describe('MetaToolPart', () => {
         expect(markup).not.toContain('Octocode localGetFileContent');
     });
 
-    test('renders tool_use fallback to "Tool Use" when input has no name or tool', () => {
+    test('renders meta_use fallback to "Tool Use" when input has no name or tool', () => {
         const part = completedPart({
-            tool: 'tool_use',
+            tool: 'meta_use',
             state: {
                 status: 'completed',
                 input: {},
@@ -284,9 +284,9 @@ describe('MetaToolPart', () => {
         expect(markup).toContain('Tool Use');
     });
 
-    test('tool_search: shows query in collapsed state instead of output', () => {
+    test('meta_search: shows query in collapsed state instead of output', () => {
         const part = completedPart({
-            tool: 'tool_search',
+            tool: 'meta_search',
             state: {
                 status: 'completed',
                 input: { query: 'billing calculation' },
@@ -308,9 +308,9 @@ describe('MetaToolPart', () => {
         expect(markup).not.toContain('Found 3 matching');
     });
 
-    test('renders arrow-right icon for tool_use — does NOT resolve inner tool icon', () => {
+    test('renders arrow-right icon for meta_use — does NOT resolve inner tool icon', () => {
         const part = completedPart({
-            tool: 'tool_use',
+            tool: 'meta_use',
             state: {
                 status: 'completed',
                 input: { name: 'bash', args: { command: 'ls' } },
@@ -326,7 +326,7 @@ describe('MetaToolPart', () => {
             </I18nProvider>,
         );
 
-        // Spec: icon always uses toolName ('tool_use' → arrow-right), does NOT resolve inner tool icon
+        // Spec: icon always uses toolName ('meta_use' → arrow-right), does NOT resolve inner tool icon
         expect(markup).toContain('oc-arrow-right"');
         // Must NOT resolve inner tool icon (no terminal-box)
         expect(markup).not.toContain('terminal-box');

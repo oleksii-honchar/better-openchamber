@@ -9,7 +9,7 @@ const STANDALONE_TOOL_NAMES = new Set<string>(['task']);
 
 const SEARCH_TOOL_NAMES = new Set<string>(['grep', 'search', 'find', 'ripgrep', 'glob']);
 
-const META_TOOL_NAMES = new Set<string>(['skill_search', 'tool_search', 'tool_use']);
+const META_TOOL_NAMES = new Set<string>(['skill_search', 'meta_search', 'meta_use']);
 
 const normalizeToolName = (toolName: unknown): string => {
     if (typeof toolName !== 'string') return '';

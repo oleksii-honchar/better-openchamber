@@ -10,14 +10,14 @@ describe('getToolIcon', () => {
         expect(result.props.name).toBe('search');
     });
 
-    test('tool_search returns search icon', () => {
-        const result = getToolIcon('tool_search');
+    test('meta_search returns search icon', () => {
+        const result = getToolIcon('meta_search');
         expect(result).toBeDefined();
         expect(result.props.name).toBe('search');
     });
 
-    test('tool_use returns arrow-right icon', () => {
-        const result = getToolIcon('tool_use');
+    test('meta_use returns arrow-right icon', () => {
+        const result = getToolIcon('meta_use');
         expect(result).toBeDefined();
         expect(result.props.name).toBe('arrow-right');
     });
@@ -41,7 +41,7 @@ describe('getToolIcon', () => {
 
     test('case insensitive matching works', () => {
         expect(getToolIcon('SKILL_SEARCH').props.name).toBe('search');
-        expect(getToolIcon('Tool_Search').props.name).toBe('search');
-        expect(getToolIcon('TOOL_USE').props.name).toBe('arrow-right');
+        expect(getToolIcon('Meta_Search').props.name).toBe('search');
+        expect(getToolIcon('META_USE').props.name).toBe('arrow-right');
     });
 });

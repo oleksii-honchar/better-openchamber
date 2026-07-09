@@ -234,7 +234,7 @@ export const TOOL_METADATA: Record<string, ToolMetadata> = {
       ]
     },
 
-    tool_search: {
+    meta_search: {
       displayName: 'Tool Search',
       category: 'ai',
       outputLanguage: 'text',
@@ -243,7 +243,7 @@ export const TOOL_METADATA: Record<string, ToolMetadata> = {
       ]
     },
 
-    tool_use: {
+    meta_use: {
       displayName: 'Tool Use',
       category: 'ai',
       outputLanguage: 'text',
