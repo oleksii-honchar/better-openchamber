@@ -2,7 +2,7 @@
 type: index
 title: "Architecture Decision Records"
 createdAt: "2026-06-12T14:30:00Z"
-updatedAt: "2026-06-14T17:50:00Z"
+updatedAt: "2026-07-09T19:00:00Z"
 tags: []
 ---
 
@@ -25,3 +25,4 @@ Architecture decisions for the better-openchamber fork, including forking strate
 
 ### UI & Rendering
 - [[0008-tool-use-log-format.adr]] — **ADR-0008 (accepted):** Format `tool_use` collapsed headers as `Tool Use "<innerName>"` with unchanged `arrow-right` icon
+- [[0009-rename-meta-tools.adr]] — **ADR-0009 (accepted):** Rename meta tools to meta_search/meta_use for log clarity
