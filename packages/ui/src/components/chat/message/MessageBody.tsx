@@ -1809,7 +1809,7 @@ const AssistantMessageBody = React.memo(({
                     continue;
                 }
 
-                // Meta tools: skill_search, tool_search, tool_use — collapsible blocks
+                // Meta tools: skill_search, meta_search, meta_use — collapsible blocks
                 if (isMetaTool(toolName)) {
                     rendered.push(
                         <FadeInOnReveal key={`meta-tool-${toolPart.id}`}>

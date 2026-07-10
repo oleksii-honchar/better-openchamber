@@ -25,7 +25,7 @@ describe('TOOL_METADATA - meta tools', () => {
     test('meta_search entry exists with correct displayName', () => {
         const meta = TOOL_METADATA['meta_search'];
         expect(meta).toBeDefined();
-        expect(meta.displayName).toBe('Tool Search');
+        expect(meta.displayName).toBe('Meta Search');
     });
 
     test('meta_search entry has category ai', () => {
@@ -43,7 +43,7 @@ describe('TOOL_METADATA - meta tools', () => {
     test('meta_use entry exists with correct displayName', () => {
         const meta = TOOL_METADATA['meta_use'];
         expect(meta).toBeDefined();
-        expect(meta.displayName).toBe('Tool Use');
+        expect(meta.displayName).toBe('Meta Use');
     });
 
     test('meta_use entry has category ai', () => {
@@ -96,13 +96,13 @@ describe('getToolMetadata - meta tools', () => {
 
     test('returns correct metadata for meta_search', () => {
         const meta = getToolMetadata('meta_search');
-        expect(meta.displayName).toBe('Tool Search');
+        expect(meta.displayName).toBe('Meta Search');
         expect(meta.category).toBe('ai');
     });
 
     test('returns correct metadata for meta_use', () => {
         const meta = getToolMetadata('meta_use');
-        expect(meta.displayName).toBe('Tool Use');
+        expect(meta.displayName).toBe('Meta Use');
         expect(meta.category).toBe('ai');
     });
 });

@@ -119,7 +119,7 @@ export const MetaToolPart: React.FC<MetaToolPartProps> = ({
         if (toolName === 'meta_use') {
             const inp = state?.input as Record<string, unknown> | undefined;
             const innerName = inp?.name as string | undefined;
-            if (innerName) return `Tool Use "${innerName}"`;
+            if (innerName) return `Meta Use "${innerName}"`;
         }
         return getToolMetadata(toolName).displayName;
     }, [toolName, state]);

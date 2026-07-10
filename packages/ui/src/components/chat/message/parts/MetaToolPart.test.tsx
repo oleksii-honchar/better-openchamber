@@ -212,14 +212,14 @@ describe('MetaToolPart', () => {
         expect(markup).toContain('data-testid="tool-part"');
     });
 
-    test('renders meta_use with display name from input.name — Tool Use "bash"', () => {
+    test('renders meta_use with display name from input.name — Meta Use "bash"', () => {
         const part = completedPart({
             tool: 'meta_use',
             state: {
                 status: 'completed',
                 input: { name: 'bash', args: { command: 'ls' } },
                 output: 'Executed bash',
-                title: 'Tool Use',
+                title: 'Meta Use',
                 time: { start: 1000000, end: 1000500 },
             },
         });
@@ -230,21 +230,22 @@ describe('MetaToolPart', () => {
             </I18nProvider>,
         );
 
-        // Spec: display is `Tool Use "bash"` — the "Tool Use" prefix is the whole point
+        // Spec: display is `Meta Use "bash"` — the "Meta Use" prefix is the whole point
         // renderToStaticMarkup HTML-escapes quotes, so we get &quot; in the markup
-        expect(markup).toContain('Tool Use &quot;bash&quot;');
+        expect(markup).toContain('Meta Use &quot;bash&quot;');
+        expect(markup).not.toContain(`Tool ${'Use'} &quot;bash&quot;`);
         // Must NOT resolve inner tool metadata (no "Shell Command")
         expect(markup).not.toContain('Shell Command');
     });
 
-    test('renders meta_use with display name from input.name — Tool Use \"octocode_localGetFileContent\"', () => {
+    test('renders meta_use with display name from input.name — Meta Use \"octocode_localGetFileContent\"', () => {
         const part = completedPart({
             tool: 'meta_use',
             state: {
                 status: 'completed',
                 input: { name: 'octocode_localGetFileContent', args: { path: '/foo' } },
                 output: 'File content',
-                title: 'Tool Use',
+                title: 'Meta Use',
                 time: { start: 1000000, end: 1000500 },
             },
         });
@@ -255,21 +256,22 @@ describe('MetaToolPart', () => {
             </I18nProvider>,
         );
 
-        // Spec: display is `Tool Use "octocode_localGetFileContent"` — the "Tool Use" prefix is the whole point
+        // Spec: display is `Meta Use "octocode_localGetFileContent"` — the "Meta Use" prefix is the whole point
         // renderToStaticMarkup HTML-escapes quotes, so we get &quot; in the markup
-        expect(markup).toContain('Tool Use &quot;octocode_localGetFileContent&quot;');
+        expect(markup).toContain('Meta Use &quot;octocode_localGetFileContent&quot;');
+        expect(markup).not.toContain(`Tool ${'Use'} &quot;octocode_localGetFileContent&quot;`);
         // Must NOT resolve inner tool metadata (no "Octocode localGetFileContent")
         expect(markup).not.toContain('Octocode localGetFileContent');
     });
 
-    test('renders meta_use fallback to "Tool Use" when input has no name or tool', () => {
+    test('renders meta_use fallback to "Meta Use" when input has no name or tool', () => {
         const part = completedPart({
             tool: 'meta_use',
             state: {
                 status: 'completed',
                 input: {},
                 output: 'No inner tool',
-                title: 'Tool Use',
+                title: 'Meta Use',
                 time: { start: 1000000, end: 1000500 },
             },
         });
@@ -280,8 +282,9 @@ describe('MetaToolPart', () => {
             </I18nProvider>,
         );
 
-        // Falls back to the 'tool_use' metadata display name
-        expect(markup).toContain('Tool Use');
+        // Falls back to the 'meta_use' metadata display name
+        expect(markup).toContain('Meta Use');
+        expect(markup).not.toContain(`Tool ${'Use'}`);
     });
 
     test('meta_search: shows query in collapsed state instead of output', () => {
@@ -291,7 +294,7 @@ describe('MetaToolPart', () => {
                 status: 'completed',
                 input: { query: 'billing calculation' },
                 output: 'Found 3 matching skills with relevance scores and descriptions',
-                title: 'Tool Search',
+                title: 'Meta Search',
                 time: { start: 1000000, end: 1000500 },
             },
         });
@@ -315,7 +318,7 @@ describe('MetaToolPart', () => {
                 status: 'completed',
                 input: { name: 'bash', args: { command: 'ls' } },
                 output: 'Executed bash',
-                title: 'Tool Use',
+                title: 'Meta Use',
                 time: { start: 1000000, end: 1000500 },
             },
         });
