@@ -487,6 +487,20 @@ class OpencodeService {
     return response.data;
   }
 
+  async summarizeSession(
+    sessionID: string,
+    providerID: string,
+    modelID: string,
+    directory?: string,
+  ): Promise<void> {
+    await this.client.session.summarize({
+      sessionID,
+      providerID,
+      modelID,
+      ...(directory ? { directory } : {}),
+    });
+  }
+
   async getSessionMessages(id: string, limit?: number): Promise<{ info: Message; parts: Part[] }[]> {
     const response = await this.client.session.messages({
       sessionID: id,
