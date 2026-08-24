@@ -5,7 +5,7 @@ import { dedupeSessionsById, normalizePath } from '../utils';
 import type { WorktreeMetadata } from '@/types/worktree';
 import type { SessionFoldersMap } from '@/stores/useSessionFoldersStore';
 import { streamPerfCount } from '@/stores/utils/streamDebug';
-import { compareSessionsByLifecycleOrder } from '@/sync/session-ordering';
+import { buildEffectiveActivityMap, compareSessionsByLifecycleOrder } from '@/sync/session-ordering';
 
 type ProjectItem = {
   id: string;
@@ -35,6 +35,44 @@ type ProjectSectionCacheEntry = {
 };
 
 const EMPTY_WORKTREES: WorktreeMetadata[] = [];
+
+/**
+ * Collect every session in a node forest, walking nested sub-agent children so
+ * the effective-activity map sees the whole subtree (flat groups store only
+ * roots in `group.sessions`; descendants live in `node.children`).
+ */
+const collectSessionNodes = (nodes: SessionNode[]): SessionNode[] => nodes.flatMap((node) => [
+  node,
+  ...collectSessionNodes(node.children),
+]);
+
+/**
+ * Sort a flat list of top-level session nodes by effective subtree activity:
+ * pinned first, then max lifecycle value over each session's whole descendant
+ * subtree. The comparator receives the effective-activity map so root ordering
+ * reflects sub-agent activity while same-parent sibling ordering stays on the
+ * sessions' own ranks.
+ */
+export const sortSessionNodesByEffectiveActivity = (
+  nodes: SessionNode[],
+  pinnedSessionIds: Set<string>,
+  sessionOrderRanks: ReadonlyMap<string, number>,
+): SessionNode[] => {
+  const effectiveActivityById = buildEffectiveActivityMap(
+    collectSessionNodes(nodes).map((node) => node.session),
+    pinnedSessionIds,
+    sessionOrderRanks,
+  );
+  return [...nodes].sort((left, right) => (
+    compareSessionsByLifecycleOrder(
+      left.session,
+      right.session,
+      pinnedSessionIds,
+      sessionOrderRanks,
+      effectiveActivityById,
+    )
+  ));
+};
 
 type Args = {
   normalizedProjects: ProjectItem[];
@@ -94,9 +132,11 @@ export const buildGlobalFlatSection = (
     .filter((scope): scope is { scopeKey: string; directory: string | null } => Boolean(scope.scopeKey))
     .filter((scope, index, all) => all.findIndex((candidate) => candidate.scopeKey === scope.scopeKey) === index);
 
-  const sessions = nonArchivedGroups
-    .flatMap((group) => group.sessions)
-    .sort((left, right) => compareSessionsByLifecycleOrder(left.session, right.session, pinnedSessionIds, sessionOrderRanks));
+  const sessions = sortSessionNodesByEffectiveActivity(
+    nonArchivedGroups.flatMap((group) => group.sessions),
+    pinnedSessionIds,
+    sessionOrderRanks,
+  );
 
   const group: SessionGroup = {
     id: 'global-flat',
@@ -287,9 +327,17 @@ export const useSessionSidebarSections = (args: Args) => {
 
       const nonArchivedGroups = section.groups.filter((group) => !group.isArchivedBucket);
       const archivedGroups = section.groups.filter((group) => group.isArchivedBucket);
-      const sessions = nonArchivedGroups.flatMap((group) => hasSessionSearchQuery
+      const mergedSessions = nonArchivedGroups.flatMap((group) => hasSessionSearchQuery
         ? (groupSearchDataByGroup.get(group)?.filteredNodes ?? [])
         : group.sessions);
+      // Sort top-level sessions by effective subtree activity (pinned first,
+      // then max activity over each session's whole descendant subtree) so the
+      // flat view reflects sub-agent activity like the grouped view.
+      const sessions = sortSessionNodesByEffectiveActivity(
+        mergedSessions,
+        pinnedSessionIds,
+        sessionOrderRanks,
+      );
       const folderScopes = nonArchivedGroups
         .map((group) => ({
           scopeKey: group.folderScopeKey ?? normalizePath(group.directory ?? null),
@@ -332,7 +380,7 @@ export const useSessionSidebarSections = (args: Args) => {
       cache.set(section, { query: normalizedSessionSearchQuery, section: flatSection });
       return flatSection;
     });
-  }, [groupSearchDataByGroup, hasSessionSearchQuery, normalizedSessionSearchQuery, sectionsForRender]);
+  }, [groupSearchDataByGroup, hasSessionSearchQuery, normalizedSessionSearchQuery, sectionsForRender, pinnedSessionIds, sessionOrderRanks]);
 
   const searchMatchCount = React.useMemo(() => {
     if (!hasSessionSearchQuery) {

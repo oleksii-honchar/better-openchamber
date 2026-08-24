@@ -168,11 +168,71 @@ export const getSessionLifecycleOrderValue = (
   pinned = false,
 ): number => rankById.get(session.id) ?? baselineRank(session, pinned);
 
+/**
+ * Compute each session's effective activity = the maximum lifecycle value over
+ * its whole descendant subtree (itself included). Roots are sessions whose
+ * parent is absent from the list (or null), mirroring
+ * `orderSessionsByLifecycleScopes`' root detection. This is what drives
+ * ROOT-level ordering so a session sorts by its most-recent sub-agent
+ * activity, not just its own.
+ */
+export const buildEffectiveActivityMap = (
+  sessions: Session[],
+  pinnedSessionIds: Set<string>,
+  rankById: ReadonlyMap<string, number>,
+): ReadonlyMap<string, number> => {
+  const sessionIds = new Set(sessions.map((session) => session.id));
+  const childrenByParent = new Map<string, Session[]>();
+  for (const session of sessions) {
+    const parentId = parentIdOf(session);
+    if (!parentId || !sessionIds.has(parentId)) continue;
+    const siblings = childrenByParent.get(parentId);
+    if (siblings) {
+      siblings.push(session);
+    } else {
+      childrenByParent.set(parentId, [session]);
+    }
+  }
+
+  const ownValue = new Map<string, number>();
+  for (const session of sessions) {
+    ownValue.set(
+      session.id,
+      getSessionLifecycleOrderValue(
+        session,
+        rankById,
+        isSessionPinned(pinnedSessionIds, sessionDirectory(session), session.id),
+      ),
+    );
+  }
+
+  const effective = new Map<string, number>();
+  const visit = (sessionId: string, stack: Set<string>): number => {
+    const cached = effective.get(sessionId);
+    if (cached !== undefined) return cached;
+    if (stack.has(sessionId)) return ownValue.get(sessionId) ?? 0;
+    stack.add(sessionId);
+    let value = ownValue.get(sessionId) ?? 0;
+    for (const child of childrenByParent.get(sessionId) ?? []) {
+      const childValue = visit(child.id, stack);
+      if (childValue > value) value = childValue;
+    }
+    stack.delete(sessionId);
+    effective.set(sessionId, value);
+    return value;
+  };
+  for (const session of sessions) {
+    visit(session.id, new Set());
+  }
+  return effective;
+};
+
 export const compareSessionsByLifecycleOrder = (
   left: Session,
   right: Session,
   pinnedSessionIds: Set<string>,
   rankById: ReadonlyMap<string, number>,
+  effectiveActivityById?: ReadonlyMap<string, number>,
 ): number => {
   const leftPinned = isSessionPinned(pinnedSessionIds, sessionDirectory(left), left.id);
   const rightPinned = isSessionPinned(pinnedSessionIds, sessionDirectory(right), right.id);
@@ -180,10 +240,19 @@ export const compareSessionsByLifecycleOrder = (
 
   const leftFallback = baselineRank(left, leftPinned);
   const rightFallback = baselineRank(right, rightPinned);
-  if (parentIdOf(left) === parentIdOf(right)) {
+  const sameParentId = parentIdOf(left) === parentIdOf(right);
+  if (sameParentId && (!effectiveActivityById || parentIdOf(left) !== null)) {
+    // Same-parent scope — siblings under a real parent, or ANY pair when no
+    // effective map is provided (byte-identical to the old behavior): own
+    // lifecycle rank only.
     const rankDelta = getSessionLifecycleOrderValue(right, rankById, rightPinned)
       - getSessionLifecycleOrderValue(left, rankById, leftPinned);
     if (rankDelta !== 0) return rankDelta;
+  } else if (effectiveActivityById) {
+    // Cross-parent (including root-vs-root): subtree-wide effective activity.
+    const effectiveDelta = (effectiveActivityById.get(right.id) ?? rightFallback)
+      - (effectiveActivityById.get(left.id) ?? leftFallback);
+    if (effectiveDelta !== 0) return effectiveDelta;
   }
 
   const baselineDelta = rightFallback - leftFallback;
@@ -220,7 +289,11 @@ export const orderSessionsByLifecycleScopes = (
   const compare = (left: Session, right: Session) => (
     compareSessionsByLifecycleOrder(left, right, pinnedSessionIds, rankById)
   );
-  roots.sort(compare);
+  const effectiveActivityById = buildEffectiveActivityMap(sessions, pinnedSessionIds, rankById);
+  const compareRoots = (left: Session, right: Session) => (
+    compareSessionsByLifecycleOrder(left, right, pinnedSessionIds, rankById, effectiveActivityById)
+  );
+  roots.sort(compareRoots);
   for (const siblings of childrenByParent.values()) {
     siblings.sort(compare);
   }

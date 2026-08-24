@@ -3,21 +3,28 @@ import type { Session } from '@opencode-ai/sdk/v2';
 import { getPinnedSessionKey } from '@/stores/useSessionPinnedStore';
 import { switchRuntimeEndpoint, getRuntimeKey } from '@/lib/runtime-switch';
 import type { SessionGroup, SessionNode } from '../types';
-import { buildGlobalFlatSection } from './useSessionSidebarSections';
+import { buildGlobalFlatSection, sortSessionNodesByEffectiveActivity } from './useSessionSidebarSections';
 
 // ── Factory helpers ──────────────────────────────────────────────────────────
 
-const session = (id: string, updated: number, created = updated): Session => ({
+const session = (id: string, updated: number, created = updated, parentID?: string): Session => ({
   id,
   slug: id,
   projectID: 'project-a',
   directory: '/projects/a',
   title: id,
   version: '1',
+  parentID,
   time: { created, updated },
 });
 
 const node = (session: Session): SessionNode => ({ session, children: [], worktree: null });
+
+const nodeWithChildren = (session: Session, children: SessionNode[]): SessionNode => ({
+  session,
+  children,
+  worktree: null,
+});
 
 const group = (overrides: Partial<SessionGroup> = {}): SessionGroup => ({
   id: 'flat',
@@ -160,5 +167,44 @@ describe('buildGlobalFlatSection', () => {
     ];
 
     expect(buildGlobalFlatSection(sections, new Set(), new Map(), 'All sessions')).toBeNull();
+  });
+
+  test('sorts top-level sessions by effective subtree activity (sub-agent bubbles its root)', () => {
+    const rootWithSub = session('root-with-sub', 1000);
+    const sub = session('sub-agent', 5000, 4900, 'root-with-sub');
+    const rootNewer = session('root-newer', 2000);
+
+    const sections = [
+      section('alpha', [
+        projectGroup('alpha', { sessions: [nodeWithChildren(rootWithSub, [node(sub)])] }),
+      ]),
+      section('beta', [
+        projectGroup('beta', { sessions: [node(rootNewer)] }),
+      ]),
+    ];
+
+    const merged = buildGlobalFlatSection(sections, new Set(), new Map(), 'All sessions');
+
+    expect(merged?.groups[0]?.sessions.map((entry) => entry.session.id)).toEqual([
+      'root-with-sub',
+      'root-newer',
+    ]);
+  });
+
+  test('flat-group sorting uses effective subtree activity for top-level sessions', () => {
+    const rootWithSub = session('root-with-sub', 1000);
+    const sub = session('sub-agent', 5000, 4900, 'root-with-sub');
+    const rootNewer = session('root-newer', 2000);
+
+    const sorted = sortSessionNodesByEffectiveActivity(
+      [node(rootNewer), nodeWithChildren(rootWithSub, [node(sub)])],
+      new Set(),
+      new Map(),
+    );
+
+    expect(sorted.map((entry) => entry.session.id)).toEqual([
+      'root-with-sub',
+      'root-newer',
+    ]);
   });
 });

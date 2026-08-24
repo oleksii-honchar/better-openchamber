@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { Session } from '@opencode-ai/sdk/v2';
+import { getPinnedSessionKey } from '@/stores/useSessionPinnedStore';
+import { getRuntimeKey } from '@/lib/runtime-switch';
 import {
   compareSessionsByLifecycleOrder,
   observeSessionActivityEvent,
@@ -10,6 +12,24 @@ import {
   useSessionOrderingStore,
   raiseSessionOrderingBaselines,
 } from './session-ordering';
+
+const pinnedKeyFor = (directory: string, sessionId: string): string => {
+  const key = getPinnedSessionKey(getRuntimeKey(), directory, sessionId);
+  if (!key) throw new Error('failed to build pinned key');
+  return key;
+};
+
+const sessionWithDirectory = (
+  id: string,
+  updated: number,
+  directory: string,
+  parentID?: string,
+): Session => ({
+  id,
+  parentID,
+  directory,
+  time: { created: updated - 1, updated },
+} as Session);
 
 const session = (
   id: string,
@@ -119,7 +139,7 @@ describe('session lifecycle ordering', () => {
     ]);
   });
 
-  test('does not promote a root when only its child has lifecycle activity', () => {
+  test('promotes a root when only its child has lifecycle activity', () => {
     const rootOlder = session('root-older', 10);
     const rootNewer = session('root-newer', 20);
     const activeChild = session('active-child', 5, 'root-older');
@@ -130,10 +150,13 @@ describe('session lifecycle ordering', () => {
       new Map([['active-child', 100]]),
     );
 
+    // The child's live rank (100) bubbles the parent root above the root with
+    // the newer own update (20). Previously the child's activity was ignored
+    // for root ordering; effective subtree activity is the new behavior.
     expect(ordered.map((item) => item.id)).toEqual([
-      'root-newer',
       'root-older',
       'active-child',
+      'root-newer',
     ]);
   });
 
@@ -156,5 +179,133 @@ describe('session lifecycle ordering', () => {
     useSessionOrderingStore.setState({ rankById: new Map([['stale', 15]]) });
     raiseSessionOrderingBaselines([session('stale', 40)]);
     expect(useSessionOrderingStore.getState().rankById.get('stale')).toBe(40);
+  });
+
+  test('promotes a root whose descendant sub-agent has newer activity above a root with a newer own update', () => {
+    const parentWithSubagent = session('parent-with-subagent', 10);
+    const subagent = session('sub-agent', 200, 'parent-with-subagent');
+    const rootNewer = session('root-newer', 20);
+
+    const ordered = orderSessionsByLifecycleScopes(
+      [parentWithSubagent, subagent, rootNewer],
+      new Set(),
+      new Map(),
+    );
+
+    expect(ordered.map((item) => item.id)).toEqual([
+      'parent-with-subagent',
+      'sub-agent',
+      'root-newer',
+    ]);
+  });
+
+  test('live sub-agent activity promotes the parent root without a direct event on the parent', () => {
+    observeSessionActivityEvent('sub-agent', 'active');
+    const rankById = useSessionOrderingStore.getState().rankById;
+    expect(rankById.has('sub-agent')).toBe(true);
+
+    const parentWithSubagent = session('parent-with-subagent', 10);
+    const subagent = session('sub-agent', 5, 'parent-with-subagent');
+    const rootNewer = session('root-newer', 20);
+
+    const ordered = orderSessionsByLifecycleScopes(
+      [parentWithSubagent, subagent, rootNewer],
+      new Set(),
+      rankById,
+    );
+
+    expect(ordered.map((item) => item.id)).toEqual([
+      'parent-with-subagent',
+      'sub-agent',
+      'root-newer',
+    ]);
+  });
+
+  test('deep nesting: a grandchild with the newest activity bubbles its top-level root to the top', () => {
+    const topRoot = session('top-root', 10);
+    const child = session('child', 5, 'top-root');
+    const grandchild = session('grandchild', 300, 'child');
+    const otherRoot = session('other-root', 20);
+
+    const ordered = orderSessionsByLifecycleScopes(
+      [topRoot, child, grandchild, otherRoot],
+      new Set(),
+      new Map(),
+    );
+
+    expect(ordered.map((item) => item.id)).toEqual([
+      'top-root',
+      'child',
+      'grandchild',
+      'other-root',
+    ]);
+  });
+
+  test('children within a root keep their own sibling ordering, not the subtree max', () => {
+    const root = session('root', 10);
+    const childA = session('child-a', 30, 'root');
+    const childB = session('child-b', 20, 'root');
+    const childBSub = session('child-b-sub', 999, 'child-b');
+
+    const ordered = orderSessionsByLifecycleScopes(
+      [root, childA, childB, childBSub],
+      new Set(),
+      new Map(),
+    );
+
+    // Siblings sort by OWN activity: child-a (30) before child-b (20), even
+    // though child-b's subtree is the newest (999) — same-parent comparisons
+    // never use the subtree max.
+    expect(ordered.map((item) => item.id)).toEqual([
+      'root',
+      'child-a',
+      'child-b',
+      'child-b-sub',
+    ]);
+  });
+
+  test('pinned roots sort first; among pinned, order by effective subtree activity', () => {
+    const pinnedA = sessionWithDirectory('pinned-a', 100, '/projects/a');
+    const pinnedB = sessionWithDirectory('pinned-b', 50, '/projects/b');
+    const pinnedBSub = sessionWithDirectory('pinned-b-sub', 400, '/projects/b', 'pinned-b');
+    const unpinnedNewer = session('unpinned-newer', 500);
+
+    const pinnedKeys = new Set([
+      pinnedKeyFor('/projects/a', 'pinned-a'),
+      pinnedKeyFor('/projects/b', 'pinned-b'),
+    ]);
+
+    const ordered = orderSessionsByLifecycleScopes(
+      [pinnedA, pinnedB, pinnedBSub, unpinnedNewer],
+      pinnedKeys,
+      new Map(),
+    );
+
+    expect(ordered.map((item) => item.id)).toEqual([
+      'pinned-b',
+      'pinned-b-sub',
+      'pinned-a',
+      'unpinned-newer',
+    ]);
+  });
+
+  test('with an effective map, root-to-root comparison uses subtree activity', () => {
+    const rootWithSubagent = session('root-with-sub', 10);
+    const subagent = session('sub-agent', 200, 'root-with-sub');
+    const rootNewer = session('root-newer', 20);
+
+    const effective = new Map([
+      ['root-with-sub', 200],
+      ['sub-agent', 200],
+      ['root-newer', 20],
+    ]);
+
+    expect(compareSessionsByLifecycleOrder(
+      rootWithSubagent,
+      rootNewer,
+      new Set(),
+      new Map(),
+      effective,
+    )).toBeLessThan(0);
   });
 });
