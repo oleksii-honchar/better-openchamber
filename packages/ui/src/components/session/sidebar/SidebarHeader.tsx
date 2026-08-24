@@ -39,6 +39,13 @@ type Props = {
   onToggleSelectionMode: () => void;
 };
 
+/** "Group sessions" dropdown entries: grouping mode → i18n label key. */
+export const SESSION_GROUPING_OPTIONS = [
+  ['by-worktree', 'sessions.sidebar.header.grouping.byWorktree'],
+  ['flat', 'sessions.sidebar.header.grouping.flat'],
+  ['global-flat', 'sessions.sidebar.header.grouping.globalFlat'],
+] as const;
+
 export function SidebarHeader(props: Props): React.ReactNode {
   const { t } = useI18n();
   const {
@@ -245,10 +252,7 @@ export function SidebarHeader(props: Props): React.ReactNode {
                   </>
                 ) : null}
                 <DropdownMenuLabel>{t('sessions.sidebar.header.grouping.label')}</DropdownMenuLabel>
-                {([
-                  ['by-worktree', 'sessions.sidebar.header.grouping.byWorktree'],
-                  ['flat', 'sessions.sidebar.header.grouping.flat'],
-                ] as const).map(([mode, labelKey]) => (
+                {SESSION_GROUPING_OPTIONS.map(([mode, labelKey]) => (
                   <DropdownMenuItem
                     key={mode}
                     onClick={() => {

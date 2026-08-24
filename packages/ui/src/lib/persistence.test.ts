@@ -487,6 +487,25 @@ describe('updateDesktopSettings', () => {
     });
   });
 
+  test('accepts the global-flat sidebarSessionGroupingMode from settings.json on load', async () => {
+    getWindow();
+    useSessionDisplayStore.setState({ sessionGroupingMode: 'by-worktree' });
+    registerSettingsApi(async () => ({}), async () => ({
+      settings: {
+        sidebarSessionGroupingMode: 'global-flat',
+        draftStartersCraftGoalAdded: true,
+        draftStartersScheduleTaskAdded: true,
+      },
+      source: 'web',
+    }));
+
+    await syncDesktopSettings();
+
+    expect(useSessionDisplayStore.getState().sessionGroupingMode).toBe('global-flat');
+
+    useSessionDisplayStore.setState({ sessionGroupingMode: 'by-worktree' });
+  });
+
   test('seeds missing shared sidebar preferences from the hydrated local cache', async () => {
     getWindow();
     const saves: Array<Partial<SettingsPayload>> = [];

@@ -33,6 +33,21 @@ describe('useSessionDisplayStore project sorting', () => {
   });
 });
 
+describe('useSessionDisplayStore session grouping', () => {
+  test('defaults to by-worktree grouping', () => {
+    expect(useSessionDisplayStore.getState().sessionGroupingMode).toBe('by-worktree');
+  });
+
+  test('stores the global-flat grouping mode', () => {
+    useSessionDisplayStore.getState().setSessionGroupingMode('global-flat');
+
+    expect(useSessionDisplayStore.getState().sessionGroupingMode).toBe('global-flat');
+
+    useSessionDisplayStore.getState().setSessionGroupingMode('by-worktree');
+    expect(useSessionDisplayStore.getState().sessionGroupingMode).toBe('by-worktree');
+  });
+});
+
 describe('useSessionDisplayStore project display', () => {
   test('defaults to showing all projects without a selected single project', () => {
     expect(useSessionDisplayStore.getState().projectDisplayMode).toBe('all');

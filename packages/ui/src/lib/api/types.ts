@@ -664,7 +664,7 @@ export interface SettingsPayload {
   projects?: ProjectEntry[];
   activeProjectId?: string;
   sidebarProjectDisplayMode?: 'all' | 'single';
-  sidebarSessionGroupingMode?: 'by-worktree' | 'flat';
+  sidebarSessionGroupingMode?: 'by-worktree' | 'flat' | 'global-flat';
   sidebarProjectSortOrder?: 'manual' | 'a-z' | 'z-a' | 'date-added' | 'recent';
   sidebarShowRecentSection?: boolean;
   securityScopedBookmarks?: string[];

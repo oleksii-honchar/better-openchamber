@@ -1267,6 +1267,7 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
     groupSearchDataByGroup,
     sectionsForRender,
     flatSectionsForRender,
+    globalFlatSection,
     searchMatchCount,
   } = useSessionSidebarSections({
     normalizedProjects: sortedProjects,
@@ -1282,6 +1283,9 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
     filterSessionNodesForSearch,
     buildGroupSearchText,
     foldersMap,
+    pinnedSessionIds,
+    sessionOrderRanks,
+    globalFlatLabel: t('sessions.sidebar.header.grouping.globalFlat'),
   });
 
   projectSectionsRef.current = projectSections;
@@ -1434,11 +1438,16 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
   // compact webview keeps inline archived buckets behind its toggle.
   const showInlineArchived = isVSCode && showArchivedSessions;
   // 'by-worktree' renders the worktree-grouped sections (parallel-work
-  // overview); 'flat' renders the merged per-project list. VS Code has no
-  // worktree groups, so both resolve to the same shape — use flat there.
+  // overview); 'flat' renders the merged per-project list; 'global-flat'
+  // renders ONE merged section across all projects. VS Code has no worktree
+  // groups, so by-worktree and flat resolve to the same shape there.
   const sessionGroupingMode = useSessionDisplayStore((state) => state.sessionGroupingMode);
+  const useGlobalFlatSections = sessionGroupingMode === 'global-flat';
   const useGroupedSections = sessionGroupingMode === 'by-worktree' && !isVSCode;
   const sectionsForSidebarRender = React.useMemo(() => {
+    if (useGlobalFlatSections) {
+      return globalFlatSection ? [globalFlatSection] : [];
+    }
     const source = useGroupedSections ? sectionsForRender : flatSectionsForRender;
     return showInlineArchived
       ? source
@@ -1447,7 +1456,7 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
           ? { ...section, groups: section.groups.filter((group) => !group.isArchivedBucket) }
           : section
       ));
-  }, [flatSectionsForRender, sectionsForRender, showInlineArchived, useGroupedSections]);
+  }, [flatSectionsForRender, globalFlatSection, sectionsForRender, showInlineArchived, useGlobalFlatSections, useGroupedSections]);
   const effectiveSingleProjectId = React.useMemo(() => {
     if (!isSingleProjectMode) return null;
     if (singleProjectId && projectSections.some((section) => section.project.id === singleProjectId)) {
@@ -1940,9 +1949,10 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
         projectSections={projectSections}
         projectPickerSections={projectSections}
         activeProjectId={activeProjectId}
-        singleProjectMode={isSingleProjectMode}
+        singleProjectMode={isSingleProjectMode && !useGlobalFlatSections}
         singleProjectId={effectiveSingleProjectId}
         setSingleProjectId={handleSingleProjectSelect}
+        hideProjectHeaders={useGlobalFlatSections}
         showOnlyMainWorkspace={showOnlyMainWorkspace}
         hasSessionSearchQuery={hasSessionSearchQuery}
         emptyState={emptyState}

@@ -4,8 +4,9 @@ import { persist } from 'zustand/middleware';
 type ProjectSortOrder = 'manual' | 'a-z' | 'z-a' | 'date-added' | 'recent';
 
 // 'by-worktree' keeps per-worktree sub-headers inside each project zone
-// (parallel-work overview); 'flat' merges everything into one recency list.
-type SessionGroupingMode = 'by-worktree' | 'flat';
+// (parallel-work overview); 'flat' merges everything into one recency list;
+// 'global-flat' merges every project's sessions into ONE cross-project list.
+type SessionGroupingMode = 'by-worktree' | 'flat' | 'global-flat';
 type ProjectDisplayMode = 'all' | 'single';
 
 type SessionDisplayStore = {
@@ -87,4 +88,4 @@ export const useSessionDisplayStore = create<SessionDisplayStore>()(
   ),
 );
 
-export type { ProjectDisplayMode, ProjectSortOrder };
+export type { ProjectDisplayMode, ProjectSortOrder, SessionGroupingMode };

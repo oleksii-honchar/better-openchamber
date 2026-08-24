@@ -463,6 +463,7 @@ export const dict: Record<I18nKey, string> = {
   "sessions.sidebar.project.selectAria": "Вибрати проєкт, зараз {project}",
   "sessions.sidebar.header.grouping.byWorktree": "За worktree",
   "sessions.sidebar.header.grouping.flat": "Плаский список",
+  "sessions.sidebar.header.grouping.globalFlat": "Глобальний плоский список",
   "sessions.sidebar.project.actions.manageWorktrees": "Керувати worktree",
   "sessions.worktreesPage.title": "Worktree у {project}",
   "sessions.worktreesPage.description": "Створюйте, переглядайте та видаляйте git worktree цього проєкту.",

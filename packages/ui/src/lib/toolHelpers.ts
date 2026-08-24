@@ -11,7 +11,7 @@ export interface ToolMetadata {
   category: 'file' | 'search' | 'code' | 'system' | 'ai' | 'web';
 }
 
-const TOOL_METADATA: Record<string, ToolMetadata> = {
+export const TOOL_METADATA: Record<string, ToolMetadata> = {
 
   read: {
     displayName: 'Read File',
@@ -234,6 +234,34 @@ const TOOL_METADATA: Record<string, ToolMetadata> = {
       category: 'ai',
       outputLanguage: 'json',
       inputFields: []
+    },
+
+    skill_search: {
+      displayName: 'Skill Search',
+      category: 'ai',
+      outputLanguage: 'text',
+      inputFields: [
+        { key: 'query', label: 'Query', type: 'text' },
+      ]
+    },
+
+    meta_search: {
+      displayName: 'Meta Search',
+      category: 'ai',
+      outputLanguage: 'text',
+      inputFields: [
+        { key: 'query', label: 'Query', type: 'text' },
+      ]
+    },
+
+    meta_use: {
+      displayName: 'Meta Use',
+      category: 'ai',
+      outputLanguage: 'text',
+      inputFields: [
+        { key: 'tool', label: 'Tool', type: 'text' },
+        { key: 'args', label: 'Arguments', type: 'code', language: 'json' },
+      ]
     }
   };
 

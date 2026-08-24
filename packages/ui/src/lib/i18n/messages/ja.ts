@@ -463,6 +463,7 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.project.selectAria': 'プロジェクトを選択、現在は{project}',
   'sessions.sidebar.header.grouping.byWorktree': 'ワークツリー別',
   'sessions.sidebar.header.grouping.flat': 'フラットリスト',
+  'sessions.sidebar.header.grouping.globalFlat': 'グローバルフラットリスト',
   'sessions.sidebar.project.actions.manageWorktrees': 'ワークツリーを管理',
   'sessions.worktreesPage.title': '{project} のワークツリー',
   'sessions.worktreesPage.description': 'このプロジェクトの git ワークツリーを作成・確認・削除します。',

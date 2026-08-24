@@ -463,6 +463,7 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.project.selectAria': '选择项目，当前为 {project}',
   'sessions.sidebar.header.grouping.byWorktree': '按工作树',
   'sessions.sidebar.header.grouping.flat': '平铺列表',
+  'sessions.sidebar.header.grouping.globalFlat': '全局平铺列表',
   'sessions.sidebar.project.actions.manageWorktrees': '管理工作树',
   'sessions.worktreesPage.title': '{project} 的工作树',
   'sessions.worktreesPage.description': '创建、查看和删除此项目的 git 工作树。',

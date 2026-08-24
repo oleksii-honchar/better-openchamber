@@ -1038,7 +1038,7 @@ const applyDesktopUiPreferences = (settings: DesktopSettings) => {
   if (settings.sidebarProjectDisplayMode === 'all' || settings.sidebarProjectDisplayMode === 'single') {
     sessionDisplayChanges.projectDisplayMode = settings.sidebarProjectDisplayMode;
   }
-  if (settings.sidebarSessionGroupingMode === 'by-worktree' || settings.sidebarSessionGroupingMode === 'flat') {
+  if (settings.sidebarSessionGroupingMode === 'by-worktree' || settings.sidebarSessionGroupingMode === 'flat' || settings.sidebarSessionGroupingMode === 'global-flat') {
     sessionDisplayChanges.sessionGroupingMode = settings.sidebarSessionGroupingMode;
   }
   if (settings.sidebarProjectSortOrder === 'manual'
@@ -1113,7 +1113,7 @@ const sanitizeWebSettings = (payload: unknown): DesktopSettings | null => {
   if (candidate.sidebarProjectDisplayMode === 'all' || candidate.sidebarProjectDisplayMode === 'single') {
     result.sidebarProjectDisplayMode = candidate.sidebarProjectDisplayMode;
   }
-  if (candidate.sidebarSessionGroupingMode === 'by-worktree' || candidate.sidebarSessionGroupingMode === 'flat') {
+  if (candidate.sidebarSessionGroupingMode === 'by-worktree' || candidate.sidebarSessionGroupingMode === 'flat' || candidate.sidebarSessionGroupingMode === 'global-flat') {
     result.sidebarSessionGroupingMode = candidate.sidebarSessionGroupingMode;
   }
   if (candidate.sidebarProjectSortOrder === 'manual'

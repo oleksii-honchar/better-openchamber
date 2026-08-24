@@ -64,6 +64,10 @@ type Props = {
   singleProjectMode: boolean;
   singleProjectId: string | null;
   setSingleProjectId: (id: string) => void;
+  /** Render each section's groups without the per-project header/collapse
+   *  chrome (used by the global-flat session list, which merges all projects
+   *  into one section). */
+  hideProjectHeaders?: boolean;
   showOnlyMainWorkspace: boolean;
   hasSessionSearchQuery: boolean;
   emptyState: React.ReactNode;
@@ -336,8 +340,67 @@ function SidebarProjectsListComponent(props: Props): React.ReactNode {
               const projectKey = project.id;
               const projectLabel = getProjectLabel(project, props.homeDirectory);
               const projectDescription = formatPathForDisplay(project.normalizedPath, props.homeDirectory);
-              const isCollapsed = props.singleProjectMode ? false : props.collapsedProjects.has(projectKey);
+              const isCollapsed = props.hideProjectHeaders
+                ? false
+                : (props.singleProjectMode ? false : props.collapsedProjects.has(projectKey));
               const isRepo = props.projectRepoStatus.get(projectKey);
+
+              const groupContent = (
+                <div className="space-y-0 pt-0.5 pb-0.5">
+                  {(() => {
+                    const orderedGroups = cachedGetOrderedGroups(projectKey, section.groups);
+                    const rootGroup = orderedGroups.find((group) => group.isMain) ?? null;
+                    const nestedGroups = rootGroup
+                      ? orderedGroups.filter((group) => group.id !== rootGroup.id)
+                      : orderedGroups;
+                    return (
+                      <DndContext
+                        sensors={groupSensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={(event) => {
+                          if (props.isInlineEditing) return;
+                          const { active, over } = event;
+                          if (!over || active.id === over.id) return;
+                          const oldIndex = nestedGroups.findIndex((item) => item.id === active.id);
+                          const newIndex = nestedGroups.findIndex((item) => item.id === over.id);
+                          if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+                          const nextNested = arrayMove(nestedGroups, oldIndex, newIndex).map((item) => item.id);
+                          const next = rootGroup ? [rootGroup.id, ...nextNested] : nextNested;
+                          props.setGroupOrderByProject((prev) => {
+                            const map = new Map(prev);
+                            map.set(projectKey, next);
+                            return map;
+                          });
+                        }}
+                      >
+                        {/* Root/flat sessions render directly under the
+                            project zone header; worktree and archived
+                            groups keep their own slim sortable sub-header. */}
+                        {rootGroup ? props.renderGroupSessions(rootGroup, `${projectKey}:${rootGroup.id}`, projectKey, true, null, undefined, scrollContainerRef) : null}
+                        <SortableContext items={nestedGroups.map((group) => group.id)} strategy={verticalListSortingStrategy}>
+                          {nestedGroups.map((group) => {
+                            const groupKey = `${projectKey}:${group.id}`;
+                            return (
+                              <SortableGroupItem key={group.id} id={group.id} disabled={props.isInlineEditing}>
+                                {(dragHandleProps) => props.renderGroupSessions(group, groupKey, projectKey, false, dragHandleProps, undefined, scrollContainerRef)}
+                              </SortableGroupItem>
+                            );
+                          })}
+                        </SortableContext>
+                        <DragOverlay dropAnimation={null} />
+                      </DndContext>
+                    );
+                  })()}
+                </div>
+              );
+
+              if (props.hideProjectHeaders) {
+                return (
+                  <div key={projectKey} className="space-y-0 pt-0.5 pb-0.5">
+                    {groupContent}
+                  </div>
+                );
+              }
 
               return (
                 <SortableProjectItem
@@ -384,54 +447,7 @@ function SidebarProjectsListComponent(props: Props): React.ReactNode {
                   projectPickerOptions={props.singleProjectMode ? projectPickerOptions : undefined}
                   onProjectSelect={props.singleProjectMode ? props.setSingleProjectId : undefined}
                 >
-                  {!isCollapsed ? (
-                    <div className="space-y-0 pt-0.5 pb-0.5">
-                      {(() => {
-                        const orderedGroups = cachedGetOrderedGroups(projectKey, section.groups);
-                        const rootGroup = orderedGroups.find((group) => group.isMain) ?? null;
-                        const nestedGroups = rootGroup
-                          ? orderedGroups.filter((group) => group.id !== rootGroup.id)
-                          : orderedGroups;
-                        return (
-                          <DndContext
-                            sensors={groupSensors}
-                            collisionDetection={closestCenter}
-                            onDragEnd={(event) => {
-                              if (props.isInlineEditing) return;
-                              const { active, over } = event;
-                              if (!over || active.id === over.id) return;
-                              const oldIndex = nestedGroups.findIndex((item) => item.id === active.id);
-                              const newIndex = nestedGroups.findIndex((item) => item.id === over.id);
-                              if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
-                              const nextNested = arrayMove(nestedGroups, oldIndex, newIndex).map((item) => item.id);
-                              const next = rootGroup ? [rootGroup.id, ...nextNested] : nextNested;
-                              props.setGroupOrderByProject((prev) => {
-                                const map = new Map(prev);
-                                map.set(projectKey, next);
-                                return map;
-                              });
-                            }}
-                          >
-                            {/* Root/flat sessions render directly under the
-                                project zone header; worktree and archived
-                                groups keep their own slim sortable sub-header. */}
-                            {rootGroup ? props.renderGroupSessions(rootGroup, `${projectKey}:${rootGroup.id}`, projectKey, true, null, undefined, scrollContainerRef) : null}
-                            <SortableContext items={nestedGroups.map((group) => group.id)} strategy={verticalListSortingStrategy}>
-                              {nestedGroups.map((group) => {
-                                const groupKey = `${projectKey}:${group.id}`;
-                                return (
-                                  <SortableGroupItem key={group.id} id={group.id} disabled={props.isInlineEditing}>
-                                    {(dragHandleProps) => props.renderGroupSessions(group, groupKey, projectKey, false, dragHandleProps, undefined, scrollContainerRef)}
-                                  </SortableGroupItem>
-                                );
-                              })}
-                            </SortableContext>
-                            <DragOverlay dropAnimation={null} />
-                          </DndContext>
-                        );
-                      })()}
-                    </div>
-                  ) : null}
+                  {!isCollapsed ? groupContent : null}
                 </SortableProjectItem>
               );
             })}

@@ -3,6 +3,7 @@ import type { Part } from '@opencode-ai/sdk/v2';
 
 import UserTextPart from './parts/UserTextPart';
 import ToolPart from './parts/ToolPart';
+import { MetaToolPart } from './parts/MetaToolPart';
 import AssistantTextPart from './parts/AssistantTextPart';
 import ReasoningPart from './parts/ReasoningPart';
 import { MessageFilesDisplay } from '../FileAttachment';
@@ -39,7 +40,7 @@ import { Icon } from "@/components/icon/Icon";
 import { formatTimestampForDisplay } from './timeFormat';
 import { ToolRevealOnMount } from './parts/ToolRevealOnMount';
 import { StaticToolRow } from './parts/ProgressiveGroup';
-import { isExpandableTool, isStandaloneTool } from './parts/toolRenderUtils';
+import { isExpandableTool, isMetaTool, isStandaloneTool } from './parts/toolRenderUtils';
 import TurnActivity from '../components/TurnActivity';
 import { useProjectContextStore } from '@/stores/useProjectContextStore';
 import { resolveProjectForSessionDirectory } from '@/lib/projectResolution';
@@ -1992,6 +1993,25 @@ const AssistantMessageBody = React.memo(({
                                     onContentChange={onContentChange}
                                     onShowPopup={onShowPopup}
                                     animateTailText={animatedToolIdsLookup.has(toolPart.id)}
+                                />
+                            </ToolRevealOnMount>
+                        </FadeInOnReveal>
+                    );
+                    flushSegmentsAfterTool(toolPartId);
+                    i++;
+                    continue;
+                }
+
+                // Meta tools: skill_search, meta_search, meta_use — collapsible blocks
+                if (isMetaTool(toolName)) {
+                    rendered.push(
+                        <FadeInOnReveal key={`meta-tool-${toolPart.id}`}>
+                            <ToolRevealOnMount animate={animatedToolIdsLookup.has(toolPart.id)} wipe>
+                                <MetaToolPart
+                                    part={toolPart}
+                                    isExpanded={expandedTools.has(toolPart.id)}
+                                    onToggle={onToggleTool}
+                                    onContentChange={onContentChange}
                                 />
                             </ToolRevealOnMount>
                         </FadeInOnReveal>

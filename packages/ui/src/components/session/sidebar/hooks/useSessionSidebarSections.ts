@@ -5,6 +5,7 @@ import { dedupeSessionsById, normalizePath } from '../utils';
 import type { WorktreeMetadata } from '@/types/worktree';
 import type { SessionFoldersMap } from '@/stores/useSessionFoldersStore';
 import { streamPerfCount } from '@/stores/utils/streamDebug';
+import { compareSessionsByLifecycleOrder } from '@/sync/session-ordering';
 
 type ProjectItem = {
   id: string;
@@ -17,7 +18,7 @@ type ProjectItem = {
   iconBackground?: string;
 };
 
-type ProjectSection = {
+export type ProjectSection = {
   project: ProjectItem;
   groups: SessionGroup[];
 };
@@ -55,6 +56,71 @@ type Args = {
   filterSessionNodesForSearch: (nodes: SessionNode[], query: string) => SessionNode[];
   buildGroupSearchText: (group: SessionGroup) => string;
   foldersMap: SessionFoldersMap;
+  /** Pinned session keys + live ordering ranks, reused to sort the merged
+   *  global-flat list exactly like the per-project lists (pinned first, then
+   *  last-active). */
+  pinnedSessionIds: Set<string>;
+  sessionOrderRanks: ReadonlyMap<string, number>;
+  /** Section/group label for the single merged "All sessions" group. */
+  globalFlatLabel: string;
+};
+
+/**
+ * Merge every project's non-archived groups into ONE cross-project section
+ * (the `global-flat` sidebar grouping mode). The merged group keeps the
+ * aggregated folder scopes (deduped by scope key) and sorts its sessions by
+ * lifecycle order: pinned first, then last-active descending, using the same
+ * comparator as the per-project lists. Archived buckets are excluded — they
+ * stay on the Archive page.
+ */
+export const buildGlobalFlatSection = (
+  sections: ProjectSection[],
+  pinnedSessionIds: Set<string>,
+  sessionOrderRanks: ReadonlyMap<string, number>,
+  label: string,
+): ProjectSection | null => {
+  const nonArchivedGroups = sections.flatMap((section) => section.groups.filter((group) => !group.isArchivedBucket));
+  if (nonArchivedGroups.length === 0) {
+    return null;
+  }
+
+  const folderScopes = nonArchivedGroups
+    .flatMap((group) => (group.folderScopes && group.folderScopes.length > 0
+      ? group.folderScopes
+      : [{
+          scopeKey: group.folderScopeKey ?? normalizePath(group.directory ?? null),
+          directory: group.directory ?? null,
+        }]))
+    .filter((scope): scope is { scopeKey: string; directory: string | null } => Boolean(scope.scopeKey))
+    .filter((scope, index, all) => all.findIndex((candidate) => candidate.scopeKey === scope.scopeKey) === index);
+
+  const sessions = nonArchivedGroups
+    .flatMap((group) => group.sessions)
+    .sort((left, right) => compareSessionsByLifecycleOrder(left.session, right.session, pinnedSessionIds, sessionOrderRanks));
+
+  const group: SessionGroup = {
+    id: 'global-flat',
+    label,
+    branch: null,
+    description: null,
+    isMain: true,
+    isArchivedBucket: false,
+    worktree: null,
+    directory: null,
+    folderScopeKey: null,
+    folderScopes,
+    sessions,
+  };
+
+  return {
+    project: {
+      id: 'global-flat',
+      path: '',
+      normalizedPath: '',
+      label,
+    },
+    groups: [group],
+  };
 };
 
 export const useSessionSidebarSections = (args: Args) => {
@@ -72,6 +138,9 @@ export const useSessionSidebarSections = (args: Args) => {
     filterSessionNodesForSearch,
     buildGroupSearchText,
     foldersMap,
+    pinnedSessionIds,
+    sessionOrderRanks,
+    globalFlatLabel,
   } = args;
   const projectSectionCacheRef = React.useRef<Map<string, ProjectSectionCacheEntry>>(new Map());
 
@@ -282,6 +351,40 @@ export const useSessionSidebarSections = (args: Args) => {
     }, 0);
   }, [hasSessionSearchQuery, sectionsForRender, groupSearchDataByGroup]);
 
+  // Global-flat display section: ONE merged section containing every
+  // project's non-archived sessions, sorted by lifecycle order. Built from the
+  // per-project flat sections (already merged + search-filtered) so folder
+  // scopes and search metadata aggregate exactly like the flat groups. When a
+  // search query is active the merged group mirrors the aggregated search
+  // metadata so the memoized SessionGroupSection subtree renders it normally.
+  const globalFlatSection = React.useMemo(() => {
+    const section = buildGlobalFlatSection(flatSectionsForRender, pinnedSessionIds, sessionOrderRanks, globalFlatLabel);
+    if (section && hasSessionSearchQuery) {
+      const merged = flatSectionsForRender
+        .flatMap((projectSection) => projectSection.groups.filter((group) => !group.isArchivedBucket))
+        .map((group) => groupSearchDataByGroup.get(group))
+        .filter((data): data is GroupSearchData => Boolean(data));
+      const mergedGroup = section.groups[0];
+      if (mergedGroup) {
+        groupSearchDataByGroup.set(mergedGroup, {
+          filteredNodes: mergedGroup.sessions,
+          matchedSessionCount: merged.reduce((total, data) => total + data.matchedSessionCount, 0),
+          folderNameMatchCount: merged.reduce((total, data) => total + data.folderNameMatchCount, 0),
+          groupMatches: merged.some((data) => data.groupMatches),
+          hasMatch: merged.some((data) => data.hasMatch),
+        });
+      }
+    }
+    return section;
+  }, [
+    flatSectionsForRender,
+    pinnedSessionIds,
+    sessionOrderRanks,
+    globalFlatLabel,
+    hasSessionSearchQuery,
+    groupSearchDataByGroup,
+  ]);
+
   return {
     projectSections,
     visibleProjectSections,
@@ -289,6 +392,7 @@ export const useSessionSidebarSections = (args: Args) => {
     searchableProjectSections,
     sectionsForRender,
     flatSectionsForRender,
+    globalFlatSection,
     searchMatchCount,
   };
 };

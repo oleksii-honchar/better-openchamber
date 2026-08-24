@@ -7,6 +7,7 @@ import type { StreamPhase } from '../types';
 import type { ContentChangeReason } from '@/hooks/useChatAutoFollow';
 import type { ToolPopupContent } from '../types';
 import ToolPart from './ToolPart';
+import { MetaToolPart } from './MetaToolPart';
 import { MinDurationShineText } from './MinDurationShineText';
 import { ToolRevealOnMount } from './ToolRevealOnMount';
 import { FileTypeIcon } from '@/components/icons/FileTypeIcon';
@@ -15,7 +16,7 @@ import { Icon } from "@/components/icon/Icon";
 import { FadeInOnReveal } from '../FadeInOnReveal';
 import { getToolIcon } from './toolPresentation';
 import { getToolMetadata } from '@/lib/toolHelpers';
-import { isExpandableTool, isStandaloneTool, isStaticTool } from './toolRenderUtils';
+import { isExpandableTool, isMetaTool, isStandaloneTool, isStaticTool } from './toolRenderUtils';
 import { RuntimeAPIContext } from '@/contexts/runtimeAPIContext';
 import { useDirectoryStore } from '@/stores/useDirectoryStore';
 import { useUIStore } from '@/stores/useUIStore';
@@ -365,6 +366,7 @@ const getToolShortDescription = (activity: TurnActivityPart): string | null => {
 
 type AggregatedRow =
     | { type: 'tool-expandable'; activity: TurnActivityPart }
+    | { type: 'tool-meta'; activity: TurnActivityPart }
     | { type: 'tool-static-group'; toolName: string; activities: TurnActivityPart[] }
     | { type: 'reasoning'; activity: TurnActivityPart }
     | { type: 'justification'; activity: TurnActivityPart }
@@ -513,6 +515,13 @@ const aggregateRows = (parts: TurnActivityPart[]): AggregatedRow[] => {
 
         if (isExpandableTool(toolName)) {
             rows.push({ type: 'tool-expandable', activity });
+            i++;
+            continue;
+        }
+
+        // Meta tools: skill_search, meta_search, meta_use — collapsible blocks
+        if (isMetaTool(toolName)) {
+            rows.push({ type: 'tool-meta', activity });
             i++;
             continue;
         }
@@ -927,6 +936,17 @@ const ProgressiveGroup: React.FC<ProgressiveGroupProps> = ({
                         onContentChange={onContentChange}
                         animateTailText={Boolean(animatedToolIds?.has(row.activity.id))}
                         animateRows={animateRows}
+                    />
+                );
+
+            case 'tool-meta':
+                return (
+                    <MetaToolPart
+                        key={`tool-meta-${row.activity.id}`}
+                        part={row.activity.part as ToolPartType}
+                        isExpanded={expandedTools.has(row.activity.id)}
+                        onToggle={onToggleTool}
+                        onContentChange={onContentChange}
                     />
                 );
 

@@ -80,6 +80,12 @@ export const getToolIcon = (toolName: string) => {
     if (tool === 'plan_exit') {
         return <Icon name="task" className={iconClass} />;
     }
+    if (tool === 'skill_search' || tool === 'meta_search') {
+        return <Icon name="search" className={iconClass} />;
+    }
+    if (tool === 'meta_use') {
+        return <Icon name="arrow-right" className={iconClass} />;
+    }
     if (tool.startsWith('git')) {
         return <Icon name="git-branch" className={iconClass} />;
     }

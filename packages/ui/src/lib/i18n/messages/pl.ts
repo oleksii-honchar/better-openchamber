@@ -274,6 +274,7 @@ export const dict: Record<I18nKey, string> = {
   'sessions.sidebar.project.selectAria': 'Wybierz projekt, obecnie {project}',
   'sessions.sidebar.header.grouping.byWorktree': 'Według worktree',
   'sessions.sidebar.header.grouping.flat': 'Płaska lista',
+  'sessions.sidebar.header.grouping.globalFlat': 'Globalna płaska lista',
   'sessions.sidebar.project.actions.manageWorktrees': 'Zarządzaj worktree',
   'sessions.worktreesPage.title': 'Worktree w {project}',
   'sessions.worktreesPage.description': 'Twórz, przeglądaj i usuwaj worktree gita tego projektu.',

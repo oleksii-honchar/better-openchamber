@@ -463,6 +463,7 @@ export const dict: Record<I18nKey, string> = {
   "sessions.sidebar.project.selectAria": "Seleccionar proyecto, actualmente {project}",
   "sessions.sidebar.header.grouping.byWorktree": "Por worktree",
   "sessions.sidebar.header.grouping.flat": "Lista plana",
+  "sessions.sidebar.header.grouping.globalFlat": "Lista plana global",
   "sessions.sidebar.project.actions.manageWorktrees": "Gestionar worktrees",
   "sessions.worktreesPage.title": "Worktrees en {project}",
   "sessions.worktreesPage.description": "Crea, inspecciona y elimina los worktrees de git de este proyecto.",

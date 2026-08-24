@@ -2945,6 +2945,7 @@ export const dict = {
   'sessions.sidebar.project.selectAria': 'Projekt auswählen, aktuell {project}',
   'sessions.sidebar.header.grouping.byWorktree': 'Nach Worktree',
   'sessions.sidebar.header.grouping.flat': 'Flache Liste',
+  'sessions.sidebar.header.grouping.globalFlat': 'Globale flache Liste',
   'sessions.sidebar.project.actions.manageWorktrees': 'Worktrees verwalten',
   'sessions.worktreesPage.title': 'Worktrees in {project}',
   'sessions.worktreesPage.description': 'Git-Worktrees für dieses Projekt erstellen, prüfen und entfernen.',

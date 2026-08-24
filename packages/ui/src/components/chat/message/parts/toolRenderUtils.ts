@@ -5,6 +5,8 @@ const STATIC_TOOL_NAMES = new Set<string>(['read', 'skill']);
 
 const STANDALONE_TOOL_NAMES = new Set<string>(['task']);
 
+const META_TOOL_NAMES = new Set<string>(['skill_search', 'meta_search', 'meta_use']);
+
 const normalizeToolName = (toolName: unknown): string => {
     if (typeof toolName !== 'string') return '';
     const trimmed = toolName.trim().toLowerCase();
@@ -19,7 +21,7 @@ const normalizeToolName = (toolName: unknown): string => {
 };
 
 export const isExpandableTool = (toolName: unknown): boolean => {
-    return !isStaticTool(toolName);
+    return !isStaticTool(toolName) && !isMetaTool(toolName);
 };
 
 export const isStandaloneTool = (toolName: unknown): boolean => {
@@ -28,6 +30,10 @@ export const isStandaloneTool = (toolName: unknown): boolean => {
 
 export const isStaticTool = (toolName: unknown): boolean => {
     return STATIC_TOOL_NAMES.has(normalizeToolName(toolName));
+};
+
+export const isMetaTool = (toolName: unknown): boolean => {
+    return META_TOOL_NAMES.has(normalizeToolName(toolName));
 };
 
 export const getToolDescriptionFallback = (
