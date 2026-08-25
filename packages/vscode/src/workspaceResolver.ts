@@ -24,3 +24,14 @@ export function resolveWorkspaceFolders(
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
   );
 }
+
+export function resolveNewSessionDirectory(
+  directoryOverride: string | undefined,
+  candidates: ReadonlyArray<WorkspaceFolderCandidate>
+): string | undefined {
+  if (directoryOverride) {
+    return directoryOverride;
+  }
+
+  return candidates[0]?.path;
+}

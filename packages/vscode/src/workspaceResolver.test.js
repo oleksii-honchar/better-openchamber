@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { resolveWorkspaceFolders } from './workspaceResolver.ts';
+import {
+  resolveNewSessionDirectory,
+  resolveWorkspaceFolders,
+} from './workspaceResolver.ts';
 
 const ALPHA = { name: 'alpha', uri: { fsPath: '/work/alpha' } };
 const BRAVO = { name: 'Bravo', uri: { fsPath: '/work/bravo' } };
@@ -64,5 +67,35 @@ describe('resolveWorkspaceFolders', () => {
 
       expect(result).toEqual([{ name: 'alpha', path: '/work/alpha' }]);
     });
+  });
+});
+
+describe('resolveNewSessionDirectory', () => {
+  test('returns an explicit directory when candidates are available', () => {
+    expect(resolveNewSessionDirectory('/work/selected', [
+      { name: 'alpha', path: '/work/alpha' },
+    ])).toBe('/work/selected');
+  });
+
+  test('returns undefined when no directory or candidates are provided', () => {
+    expect(resolveNewSessionDirectory(undefined, [])).toBeUndefined();
+  });
+
+  test('returns the only candidate path when no directory is provided', () => {
+    expect(resolveNewSessionDirectory(undefined, [
+      { name: 'alpha', path: '/work/alpha' },
+    ])).toBe('/work/alpha');
+  });
+
+  test('returns the first path after resolver sorting for unsorted inputs', () => {
+    const candidates = resolveWorkspaceFolders([CHARLIE, ALPHA, BRAVO]);
+
+    expect(resolveNewSessionDirectory(undefined, candidates)).toBe('/work/alpha');
+  });
+
+  test('returns an explicit directory even when it is absent from candidates', () => {
+    expect(resolveNewSessionDirectory('/outside/workspace', [
+      { name: 'alpha', path: '/work/alpha' },
+    ])).toBe('/outside/workspace');
   });
 });

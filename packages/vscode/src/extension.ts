@@ -4,7 +4,7 @@ import { AgentManagerPanelProvider } from './AgentManagerPanelProvider';
 import { SessionEditorPanelProvider } from './SessionEditorPanelProvider';
 import { createOpenCodeManager, type OpenCodeManager } from './opencode';
 import { startGlobalEventWatcher, stopGlobalEventWatcher, setChatViewProvider } from './sessionActivityWatcher';
-import { resolveWorkspaceFolders } from './workspaceResolver';
+import { resolveNewSessionDirectory, resolveWorkspaceFolders } from './workspaceResolver';
 
 let chatViewProvider: ChatViewProvider | undefined;
 let agentManagerProvider: AgentManagerPanelProvider | undefined;
@@ -480,14 +480,7 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      if (!folderPath) {
-        folderPath = candidates.length === 1
-          ? candidates[0].path
-          : (await vscode.window.showQuickPick(
-              candidates.map((folder) => ({ label: folder.name, description: folder.path, path: folder.path })),
-              { placeHolder: 'Select a workspace folder for this session', matchOnDescription: true }
-            ))?.path;
-      }
+      folderPath = resolveNewSessionDirectory(folderPath, candidates);
 
       if (!folderPath) {
         return;

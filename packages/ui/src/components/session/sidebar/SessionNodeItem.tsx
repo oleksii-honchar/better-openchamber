@@ -717,7 +717,7 @@ function SessionNodeItemComponent(props: Props): React.ReactNode {
   );
   const leadingIndicators = isMovingToWorktree || showStatusMarker || showPinnedMarker ? (
     <span
-      style={{ left: ROW_GUTTER_LEFT_PX + depth * ROW_DEPTH_STEP_PX }}
+      style={{ left: ROW_GUTTER_LEFT_PX + depth * ROW_DEPTH_STEP_PX - 6 }}
       className={cn(
         'pointer-events-none absolute top-1/2 inline-flex h-3.5 w-3.5 -translate-y-1/2 items-center justify-center transition-opacity',
         hideLeadingIndicatorOnHover ? 'opacity-100 group-hover:opacity-0 group-focus-within:opacity-0' : '',
