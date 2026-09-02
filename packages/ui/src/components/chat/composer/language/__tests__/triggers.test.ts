@@ -49,12 +49,12 @@ describe('command palette', () => {
         })).toBeNull();
     });
 
-    test('a typed single-token command still opens the palette', () => {
-        expect(at('/review|', {
+    test('a typed absolute path does not open the palette (shape, not paste)', () => {
+        expect(at('/usr/local/bin|', {
             inputMode: 'normal',
             inputSource: 'manual',
-            insertedText: 'review',
-        })).toEqual({ kind: 'command', query: 'review' });
+            insertedText: '/usr/local/bin',
+        })).toBeNull();
     });
 });
 

@@ -49,29 +49,28 @@ const isWordBoundaryBefore = (text: string, index: number): boolean =>
  * caret still inside the command word and no argument typed yet. Once a space
  * appears the message is a command invocation, not a search.
  *
- * A leading `/` that arrived by paste is not a command when it starts a
- * filesystem path: absolute paths (`/Users/...`) and pasted relative paths with
- * a leading slash (`/src/...`) both carry a second separator, so the slash is
- * path syntax, not command syntax. The command palette stays available for
- * typed commands (`/review`) and for a pasted bare `/`.
+ * A `/` in the very first column that already contains a second `/` before any
+ * space/newline is a filesystem path, not a command. That covers both pasted
+ * absolute paths (`/Users/...`) and pasted or typed leading-slash paths
+ * (`/src/...`); commands are single tokens, so none of them contains a slash.
+ * This must not depend on paste indicators — a plain path paste arrives through
+ * CodeMirror with `fromPaste`, but `ChatInput` only marks `inputSource: 'paste'`
+ * when the pasted text contains `@`, so the path shape is the reliable signal.
  */
-function matchCommandPalette(
-    value: string,
-    cursorPosition: number,
-    context: TriggerContext,
-): AutocompleteTrigger | null {
+function matchCommandPalette(value: string, cursorPosition: number): AutocompleteTrigger | null {
     if (!value.startsWith('/')) return null;
-
-    if (context.inputSource === 'paste' && value.slice(1).includes('/')) return null;
-
-    const firstSpace = value.indexOf(' ');
-    if (firstSpace !== -1) return null;
 
     const firstNewline = value.indexOf('\n');
     const commandEnd = firstNewline === -1 ? value.length : firstNewline;
     if (cursorPosition > commandEnd) return null;
 
-    return { kind: 'command', query: value.substring(1, commandEnd) };
+    const query = value.substring(1, commandEnd);
+    if (query.includes('/')) return null;
+
+    const firstSpace = value.indexOf(' ');
+    if (firstSpace !== -1) return null;
+
+    return { kind: 'command', query };
 }
 
 /**
@@ -107,7 +106,7 @@ export function resolveAutocompleteTrigger(
 ): AutocompleteTrigger | null {
     if (context.inputMode === 'shell') return null;
 
-    return matchCommandPalette(value, cursorPosition, context)
+    return matchCommandPalette(value, cursorPosition)
         ?? matchInlineToken(value, cursorPosition, '/', 'skill')
         ?? matchInlineToken(value, cursorPosition, '#', 'snippet')
         ?? matchMention(value, cursorPosition, context);
