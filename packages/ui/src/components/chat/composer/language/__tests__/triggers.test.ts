@@ -32,6 +32,30 @@ describe('command palette', () => {
     test('a slash that is not in the first column is not the palette', () => {
         expect(at(' /rev|')).toEqual({ kind: 'skill', query: 'rev' });
     });
+
+    test('a pasted absolute path does not open the command palette', () => {
+        expect(at('/Users/tuiteraz/Downloads/jvastai_root.cer|', {
+            inputMode: 'normal',
+            inputSource: 'paste',
+            insertedText: '/Users/tuiteraz/Downloads/jvastai_root.cer',
+        })).toBeNull();
+    });
+
+    test('a pasted relative path with a leading slash does not open the palette', () => {
+        expect(at('/src/foo.ts|', {
+            inputMode: 'normal',
+            inputSource: 'paste',
+            insertedText: '/src/foo.ts',
+        })).toBeNull();
+    });
+
+    test('a typed single-token command still opens the palette', () => {
+        expect(at('/review|', {
+            inputMode: 'normal',
+            inputSource: 'manual',
+            insertedText: 'review',
+        })).toEqual({ kind: 'command', query: 'review' });
+    });
 });
 
 describe('inline skill picker', () => {

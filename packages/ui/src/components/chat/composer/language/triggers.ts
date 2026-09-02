@@ -48,9 +48,21 @@ const isWordBoundaryBefore = (text: string, index: number): boolean =>
  * The command palette is reserved for a `/` in the very first column, with the
  * caret still inside the command word and no argument typed yet. Once a space
  * appears the message is a command invocation, not a search.
+ *
+ * A leading `/` that arrived by paste is not a command when it starts a
+ * filesystem path: absolute paths (`/Users/...`) and pasted relative paths with
+ * a leading slash (`/src/...`) both carry a second separator, so the slash is
+ * path syntax, not command syntax. The command palette stays available for
+ * typed commands (`/review`) and for a pasted bare `/`.
  */
-function matchCommandPalette(value: string, cursorPosition: number): AutocompleteTrigger | null {
+function matchCommandPalette(
+    value: string,
+    cursorPosition: number,
+    context: TriggerContext,
+): AutocompleteTrigger | null {
     if (!value.startsWith('/')) return null;
+
+    if (context.inputSource === 'paste' && value.slice(1).includes('/')) return null;
 
     const firstSpace = value.indexOf(' ');
     if (firstSpace !== -1) return null;
@@ -95,7 +107,7 @@ export function resolveAutocompleteTrigger(
 ): AutocompleteTrigger | null {
     if (context.inputMode === 'shell') return null;
 
-    return matchCommandPalette(value, cursorPosition)
+    return matchCommandPalette(value, cursorPosition, context)
         ?? matchInlineToken(value, cursorPosition, '/', 'skill')
         ?? matchInlineToken(value, cursorPosition, '#', 'snippet')
         ?? matchMention(value, cursorPosition, context);
