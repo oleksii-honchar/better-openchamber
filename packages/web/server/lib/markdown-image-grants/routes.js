@@ -2,8 +2,54 @@ import express from 'express';
 import { constants as fsConstants } from 'node:fs';
 import { mintOutsideFileGrant } from '../fs/routes.js';
 
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_IMAGE_SOURCES = 12;
+
+const MIB = 1024 * 1024;
+
+// Per-kind media size caps — duplicated from the renderer (Task 6) because
+// web-server JS and UI TS are separate packages; the parity test keeps them honest.
+// Exported so the parity test can import this package's copy directly.
+export const MARKDOWN_MEDIA_MAX_BYTES = {
+  image: 10 * MIB,
+  video: 50 * MIB,
+  audio: 20 * MIB,
+};
+
+// Media kinds the grant route accepts, classified by source extension.
+// Mirrors the renderer's supported MIME set (image png/jpeg/gif/webp,
+// video mp4/webm, audio mpeg/wav/mp4) — parity-tested.
+const SUPPORTED_MEDIA_KINDS = new Set(['image', 'video', 'audio']);
+
+// MIME types the grant route can classify by extension (parity with renderer).
+export const SUPPORTED_MEDIA_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'video/mp4',
+  'video/webm',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/mp4', // m4a container (ftyp signature)
+]);
+
+// Extension → kind classification (same surface as the renderer's
+// `getMarkdownMediaKindFromSource`).
+const KIND_BY_EXTENSION = {
+  png: 'image',
+  jpg: 'image',
+  jpeg: 'image',
+  gif: 'image',
+  webp: 'image',
+  mp4: 'video',
+  webm: 'video',
+  m4v: 'video',
+  mov: 'video',
+  ogv: 'video',
+  mp3: 'audio',
+  wav: 'audio',
+  m4a: 'audio',
+};
 
 const asString = (value) => typeof value === 'string' ? value.trim() : '';
 
@@ -40,6 +86,31 @@ const hasImageSignature = (bytes) => {
   return header.startsWith('GIF87a')
     || header.startsWith('GIF89a')
     || (header.startsWith('RIFF') && header.slice(8, 12) === 'WEBP');
+};
+
+// Media container sniffing — reused image signatures plus video/audio containers.
+// Mirrors the renderer's `hasMediaSignature` MIME→signature map.
+const hasMediaSignatureForKind = (bytes, kind) => {
+  const header = bytes.subarray(0, 12).toString('ascii');
+  if (kind === 'image') return hasImageSignature(bytes);
+  if (kind === 'video') {
+    return header.slice(4, 8) === 'ftyp'
+      || (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3);
+  }
+  if (kind === 'audio') {
+    // mp3 (ID3), wav (RIFF....WAVE) and m4a (ftyp at offset 4, `audio/mp4`).
+    // The m4a branch mirrors the renderer's `hasMediaSignature` audio/mp4 case.
+    return header.startsWith('ID3')
+      || (header.startsWith('RIFF') && header.slice(8, 12) === 'WAVE')
+      || header.slice(4, 8) === 'ftyp';
+  }
+  return false;
+};
+
+const classifyMediaKind = (source) => {
+  const pathname = asString(source).split(/[?#]/, 1)[0] || '';
+  const extension = pathname.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
+  return extension ? KIND_BY_EXTENSION[extension] : undefined;
 };
 
 const normalizeReferenceLabel = (value) => value.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -211,9 +282,11 @@ const fetchMessage = async ({ sessionId, messageId, directory, buildOpenCodeUrl,
   return message?.info && Array.isArray(message.parts) ? message : null;
 };
 
-const inspectImage = async ({ source, directory, approvedTempRoot, fsPromises, path }) => {
+const inspectMediaSource = async ({ source, directory, approvedTempRoot, fsPromises, path }) => {
   const parsed = parseFileSource(source);
   if (!parsed) return { status: 'error' };
+  const kind = classifyMediaKind(parsed);
+  if (!kind || !SUPPORTED_MEDIA_KINDS.has(kind)) return { status: 'error' };
   const sourcePath = path.isAbsolute(parsed) ? parsed : path.resolve(directory, parsed);
   const workspaceRoot = path.resolve(directory);
   const outsideWorkspace = !isWithin(path.resolve(sourcePath), workspaceRoot, path);
@@ -229,12 +302,13 @@ const inspectImage = async ({ source, directory, approvedTempRoot, fsPromises, p
     const handle = await fsPromises.open(canonicalPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
     try {
       const stats = await handle.stat();
-      if (!stats.isFile() || stats.size > MAX_IMAGE_BYTES) return { status: 'error' };
+      if (!stats.isFile() || stats.size > MARKDOWN_MEDIA_MAX_BYTES[kind]) return { status: 'error' };
       const header = Buffer.alloc(12);
       const { bytesRead } = await handle.read(header, 0, header.length, 0);
-      if (!hasImageSignature(header.subarray(0, bytesRead))) return { status: 'error' };
+      if (!hasMediaSignatureForKind(header.subarray(0, bytesRead), kind)) return { status: 'error' };
       return {
         status: 'ready',
+        kind,
         path: outsideWorkspace ? canonicalPath : path.resolve(sourcePath),
         outsideWorkspace,
       };
@@ -299,7 +373,7 @@ export const registerMarkdownImageGrantRoutes = (app, dependencies) => {
             continue;
           }
           try {
-            const inspected = await inspectImage({
+            const inspected = await inspectMediaSource({
               source,
               directory: validatedDirectory.directory,
               approvedTempRoot,

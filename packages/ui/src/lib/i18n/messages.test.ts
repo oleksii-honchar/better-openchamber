@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
 
 import { dict as enDict } from './messages/en';
 import { dict as esDict } from './messages/es';
@@ -40,6 +42,64 @@ describe('i18n dictionaries', () => {
       expect(dictionary['common.language.german']).toBeTruthy();
       expect(dictionary['common.language.french']).toBeTruthy();
       expect(dictionary['common.language.japanese']).toBeTruthy();
+    }
+  });
+
+  test('every chat.media.* key exists in all locales with a real translation', () => {
+    const mediaKeys = Object.keys(enDict).filter((key) => key.startsWith('chat.media.'));
+    expect(mediaKeys.length).toBeGreaterThan(0);
+
+    for (const [locale, dictionary] of Object.entries(localeDictionaries)) {
+      for (const key of mediaKeys) {
+        const value = dictionary[key as keyof typeof dictionary];
+        expect(value).toBeTruthy();
+        if (locale !== 'en') {
+          expect(value).not.toBe(enDict[key as keyof typeof enDict]);
+        }
+      }
+    }
+  });
+});
+
+const mediaRenderFiles = [
+  'src/components/chat/MarkdownImageGallery.tsx',
+  'src/components/chat/markdownImageGalleryMedia.tsx',
+  'src/components/chat/FileAttachment.tsx',
+  'src/components/chat/filePartMedia.tsx',
+] as const;
+
+/**
+ * Pre-existing English literals in the sweep scope, present before the
+ * media feature (Tasks 5-10). Each entry is a file-path → literal occurrence.
+ * Adding a NEW hardcoded English label to these files will fail the test.
+ */
+const preexistingEnglishLiteralsAllowlist: Readonly<Record<string, readonly string[]>> = {
+  'src/components/chat/FileAttachment.tsx': [
+    "'File attach failed'",
+    "'Image'",
+    "'Enter'",
+    "'Unnamed file'",
+    "'Image'",
+    "'Image'",
+    "'Image'",
+  ],
+};
+
+/** Uppercase-English-sentence string literals: "'Media is unavailable'" / "'Image'". */
+const englishLiteralPattern = /['"][A-Z][a-z]+(?: [a-z]+)+['"]|['"][A-Z][a-z]+['"]/g;
+
+describe('chat media labels — hardcoded English sweep lock', () => {
+  test('media render files contain no new hardcoded English labels', () => {
+    for (const relativePath of mediaRenderFiles) {
+      const source = readFileSync(
+        join(__dirname, '..', '..', 'components', 'chat', basename(relativePath)),
+        'utf-8',
+      );
+      const matches = source.match(englishLiteralPattern) ?? [];
+      const newMatches = matches.filter(
+        (match) => !preexistingEnglishLiteralsAllowlist[relativePath]?.includes(match),
+      );
+      expect(newMatches).toEqual([]);
     }
   });
 });

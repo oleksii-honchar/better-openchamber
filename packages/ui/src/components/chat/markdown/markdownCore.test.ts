@@ -131,9 +131,9 @@ describe('Markdown images', () => {
     ]);
 
     expect(candidates).toEqual([
-      { source: 'screens/first%20view.png', filename: 'first view.png' },
-      { source: 'https://example.test/second.webp?size=2', filename: 'second.webp' },
-      { source: 'data:image/png;base64,AAAA', filename: 'third' },
+      { source: 'screens/first%20view.png', filename: 'first view.png', kind: 'image' },
+      { source: 'https://example.test/second.webp?size=2', filename: 'second.webp', kind: 'image' },
+      { source: 'data:image/png;base64,AAAA', filename: 'third', kind: 'image' },
     ]);
   });
 
@@ -185,7 +185,7 @@ describe('Markdown images', () => {
     const source = 'data:image/png;base64,AAAA';
 
     expect(extractMarkdownImageCandidates([`![](${source})`])).toEqual([
-      { source, filename: 'image.png' },
+      { source, filename: 'image.png', kind: 'image' },
     ]);
     expect(renderMarkdownSync(`![](${source})`, 'label')).toContain('image.png');
   });
@@ -233,5 +233,109 @@ describe('Markdown images', () => {
 
     expect(html).toContain('<img src="https://example.test/image.png"');
     expect(html).not.toContain('data-openchamber-markdown-image');
+  });
+});
+
+describe('Markdown media candidates', () => {
+  test('classifies image-syntax video and audio destinations by extension', () => {
+    expect(extractMarkdownImageCandidates(['![label](video.mp4)'])).toEqual([
+      { source: 'video.mp4', filename: 'video.mp4', kind: 'video' },
+    ]);
+    expect(extractMarkdownImageCandidates(['![label](audio.mp3)'])).toEqual([
+      { source: 'audio.mp3', filename: 'audio.mp3', kind: 'audio' },
+    ]);
+  });
+
+  test('keeps image-syntax png/jpg destinations classified as image', () => {
+    expect(extractMarkdownImageCandidates(['![a](screens/a.png)', '![b](screens/b.jpg)'])).toEqual([
+      { source: 'screens/a.png', filename: 'a.png', kind: 'image' },
+      { source: 'screens/b.jpg', filename: 'b.jpg', kind: 'image' },
+    ]);
+  });
+
+  test('classifies remote media destinations by extension', () => {
+    expect(extractMarkdownImageCandidates(['![clip](https://example.test/clip.webm)'])).toEqual([
+      { source: 'https://example.test/clip.webm', filename: 'clip.webm', kind: 'video' },
+    ]);
+    expect(extractMarkdownImageCandidates(['![track](https://example.test/track.wav?x=1)'])).toEqual([
+      { source: 'https://example.test/track.wav?x=1', filename: 'track.wav', kind: 'audio' },
+    ]);
+  });
+
+  test('captures raw media links whose text describes media', () => {
+    expect(extractMarkdownImageCandidates(['[watch](video.mp4)'])).toEqual([
+      { source: 'video.mp4', filename: 'video.mp4', kind: 'video' },
+    ]);
+    expect(extractMarkdownImageCandidates(['[listen](https://example.test/clip.mp3)'])).toEqual([
+      { source: 'https://example.test/clip.mp3', filename: 'clip.mp3', kind: 'audio' },
+    ]);
+    expect(extractMarkdownImageCandidates(['[watch](https://example.test/clip.mp4?raw=1)'])).toEqual([
+      { source: 'https://example.test/clip.mp4?raw=1', filename: 'clip.mp4', kind: 'video' },
+    ]);
+  });
+
+  test('excludes links whose text does not describe media or whose destination is not media', () => {
+    expect(extractMarkdownImageCandidates(['[download](video.mp4)'])).toEqual([]);
+    expect(extractMarkdownImageCandidates(['[watch](https://example.test/article)'])).toEqual([]);
+    expect(extractMarkdownImageCandidates(['[read](https://example.test/page.html)'])).toEqual([]);
+  });
+
+  test('keeps data URLs image-only and rejects media data URLs', () => {
+    expect(extractMarkdownImageCandidates(['![x](data:video/mp4;base64,AAAA)'])).toEqual([]);
+    expect(extractMarkdownImageCandidates(['![x](data:image/png;base64,AAAA)'])).toEqual([
+      { source: 'data:image/png;base64,AAAA', filename: 'x', kind: 'image' },
+    ]);
+  });
+
+  test('does not emit audio candidates for trimmed extensions (ogg/oga/aac/flac)', () => {
+    // These extensions were classified `audio` but have no MIME-set entry or
+    // signature support — the classifier no longer promises media for them
+    // (reviewer Issue #2; trimmed from LOCAL_MEDIA_EXTENSION_RE + kind map).
+    for (const extension of ['ogg', 'oga', 'aac', 'flac']) {
+      expect(extractMarkdownImageCandidates([`![label](track.${extension})`])).toEqual([]);
+      expect(extractMarkdownImageCandidates([`[listen](https://example.test/track.${extension})`])).toEqual([]);
+    }
+    // Supported audio types are unchanged.
+    expect(extractMarkdownImageCandidates(['![label](audio.mp3)'])).toEqual([
+      { source: 'audio.mp3', filename: 'audio.mp3', kind: 'audio' },
+    ]);
+  });
+
+  test('dedupes media candidates by source across image and link forms', () => {
+    expect(extractMarkdownImageCandidates([
+      '![a](video.mp4) [watch](video.mp4) ![b](video.mp4)',
+    ])).toEqual([
+      { source: 'video.mp4', filename: 'video.mp4', kind: 'video' },
+    ]);
+  });
+
+  test('caps combined media candidates at twelve across kinds', () => {
+    const markdown = [
+      ...Array.from({ length: 6 }, (_, index) => `![image ${index}](screens/${index}.png)`),
+      ...Array.from({ length: 6 }, (_, index) => `![video ${index}](clips/${index}.mp4)`),
+      ...Array.from({ length: 6 }, (_, index) => `![audio ${index}](audio/${index}.mp3)`),
+    ].join('\n');
+
+    const candidates = extractMarkdownImageCandidates([markdown]);
+
+    expect(candidates).toHaveLength(12);
+    expect(candidates.at(-1)?.kind).toBe('video');
+    expect(candidates.at(-1)?.source).toBe('clips/5.mp4');
+  });
+
+  test('keeps cache instrumentation semantics with media candidates', () => {
+    __markdownImageCandidateCacheForTests.reset();
+    const content = '![watch](video.mp4)\n![listen](audio.mp3)';
+
+    expect(extractMarkdownImageCandidates([content])).toHaveLength(2);
+    expect(__markdownImageCandidateCacheForTests.stats().scans).toBe(1);
+
+    for (let round = 0; round < 10; round += 1) {
+      expect(extractMarkdownImageCandidates([content])).toHaveLength(2);
+    }
+
+    const stats = __markdownImageCandidateCacheForTests.stats();
+    expect(stats.entries).toBe(1);
+    expect(stats.scans).toBe(1);
   });
 });

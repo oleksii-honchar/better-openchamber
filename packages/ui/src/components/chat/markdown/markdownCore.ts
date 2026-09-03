@@ -12,14 +12,20 @@ import { escapeRawMarkdownHtml, isLocalFileUrl, MARKDOWN_FORBIDDEN_TAGS } from '
 const escapeAttr = (value: string): string =>
   value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-const LOCAL_IMAGE_EXTENSION_RE = /\.(?:png|jpe?g|gif|webp)(?:[?#].*)?$/i;
+const LOCAL_MEDIA_EXTENSION_RE = /\.(?:png|jpe?g|gif|webp|mp4|webm|m4v|mov|ogv|mp3|wav|m4a)(?:[?#].*)?$/i;
 const WINDOWS_ABSOLUTE_PATH_RE = /^[A-Za-z]:[\\/]/;
 const URL_SCHEME_RE = /^[A-Za-z][A-Za-z\d+.-]*:/;
+
+export type MarkdownImageCandidateKind = 'image' | 'video' | 'audio';
 
 export interface MarkdownImageCandidate {
   source: string;
   filename: string;
+  kind: MarkdownImageCandidateKind;
 }
+
+// Text that signals the link's destination is meant to be watched/listened to.
+const MARKDOWN_MEDIA_LINK_TEXT_RE = /\b(?:watch|listen|play|view|video|audio|clip|media|recording|stream)\b/i;
 
 export type MarkdownImageMode = 'inline' | 'label';
 
@@ -39,7 +45,7 @@ let markdownImageCandidateCacheBytes = 0;
 let markdownImageCandidateScanCount = 0;
 
 const isLocalMarkdownImageSource = (source: string): boolean => {
-  if (/^\/\//.test(source) || !LOCAL_IMAGE_EXTENSION_RE.test(source)) return false;
+  if (/^\/\//.test(source) || !LOCAL_MEDIA_EXTENSION_RE.test(source)) return false;
   return WINDOWS_ABSOLUTE_PATH_RE.test(source)
     || /^file:\/\//i.test(source)
     || !URL_SCHEME_RE.test(source);
@@ -50,6 +56,38 @@ const isSupportedMarkdownImageSource = (source: string): boolean => (
   || /^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(source)
   || isLocalMarkdownImageSource(source)
 );
+
+/**
+ * Classify a markdown media destination from its extension/MIME. Single place
+ * where kind is derived so downstream validation/rendering can branch on it
+ * without re-parsing the source. Data URLs are image-only; remote sources
+ * without a known media extension keep the legacy image treatment.
+ */
+const getMarkdownMediaKind = (source: string): MarkdownImageCandidateKind => {
+  if (/^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(source)) return 'image';
+
+  const path = source.split(/[?#]/, 1)[0]?.toLowerCase() ?? '';
+  switch (path.match(/\.([a-z0-9]+)$/)?.[1]) {
+    case 'mp4':
+    case 'webm':
+    case 'm4v':
+    case 'mov':
+    case 'ogv':
+      return 'video';
+    case 'mp3':
+    case 'wav':
+    case 'm4a':
+      return 'audio';
+    case 'png':
+    case 'jpg':
+    case 'jpeg':
+    case 'gif':
+    case 'webp':
+      return 'image';
+    default:
+      return 'image';
+  }
+};
 
 const getMarkdownImageFilename = (source: string, fallback: string): string => {
   if (/^data:image\/(png|jpeg|gif|webp)/i.test(source)) {
@@ -80,16 +118,32 @@ const scanMarkdownImageCandidates = (markdown: string): MarkdownImageCandidate[]
   const seen = new Set<string>();
   const tokens = marked.lexer(markdown);
   marked.walkTokens(tokens, (token) => {
-    if (token.type !== 'image') return;
+    const isImageToken = token.type === 'image';
+    if (!isImageToken && token.type !== 'link') return;
 
     const source = token.href ?? '';
-    if (!source || !isSupportedMarkdownImageSource(source) || seen.has(source)) return;
+    if (!source || seen.has(source)) return;
+
+    if (isImageToken) {
+      // Image syntax: preserve existing behavior — only supported image/media
+      // sources; the legacy data-URL gate stays image-only.
+      if (!isSupportedMarkdownImageSource(source)) return;
+    } else {
+      // Raw links are captured only when the destination is a supported media
+      // source (video/audio) and the link text describes media. Non-media
+      // links and bare autolinks stay excluded.
+      if (token.text === source || !MARKDOWN_MEDIA_LINK_TEXT_RE.test(token.text ?? '')) return;
+      if (!/^(?:https?:)?\/\//i.test(source) && !isLocalMarkdownImageSource(source)) return;
+    }
+
+    const kind = getMarkdownMediaKind(source);
+    if (!isImageToken && kind === 'image') return;
     const fallback = typeof token.text === 'string' ? token.text : '';
     const filename = getMarkdownImageFilename(source, fallback);
     if (!filename) return;
 
     seen.add(source);
-    candidates.push({ source, filename });
+    candidates.push({ source, filename, kind });
   });
   return candidates;
 };

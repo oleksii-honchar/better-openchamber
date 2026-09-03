@@ -2,15 +2,37 @@ import { runtimeFetch } from '@/lib/runtime-fetch';
 import { getRuntimeUrlResolver, type RuntimeUrlResolver } from '@/lib/runtime-url';
 import { isFilePathWithinDirectory, toAbsoluteFilePath } from '@/lib/path-utils';
 
-const MAX_MARKDOWN_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_PREPARE_CACHE_ENTRIES = 1024;
 const NON_READY_CACHE_MS = 30_000;
-const SUPPORTED_IMAGE_MIME_TYPES = new Set([
+const MIB = 1024 * 1024;
+
+type MarkdownMediaKind = 'image' | 'video' | 'audio';
+
+/** Single source of truth for per-kind size caps (renderer + data-URL checks). */
+const MARKDOWN_MEDIA_MAX_BYTES: Record<MarkdownMediaKind, number> = {
+  image: 10 * MIB,
+  video: 50 * MIB,
+  audio: 20 * MIB,
+};
+
+const SUPPORTED_MEDIA_MIME_TYPES = new Set([
+  // image
   'image/png',
   'image/jpeg',
   'image/gif',
   'image/webp',
+  // video
+  'video/mp4',
+  'video/webm',
+  // audio
+  'audio/mpeg',
+  'audio/wav',
+  'audio/mp4', // m4a container (ftyp signature)
 ]);
+
+// Exported for parity tests (web-server grant route duplicates these constants;
+// the parity test asserts both sides agree).
+export { MARKDOWN_MEDIA_MAX_BYTES, SUPPORTED_MEDIA_MIME_TYPES };
 
 export type PreparedMarkdownImage =
   | { status: 'ready'; path: string; outsideFileGrant?: string; expiresAt?: number }
@@ -63,7 +85,38 @@ const blobToDataUrl = (blob: Blob): Promise<string> => new Promise((resolve, rej
   reader.readAsDataURL(blob);
 });
 
-const hasImageSignature = async (blob: Blob, mimeType: string): Promise<boolean> => {
+const getMarkdownMediaKindFromMime = (mimeType: string): MarkdownMediaKind | undefined => {
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType.startsWith('video/')) return 'video';
+  if (mimeType.startsWith('audio/')) return 'audio';
+  return undefined;
+};
+
+const getMarkdownMediaKindFromSource = (source: string): MarkdownMediaKind | undefined => {
+  const path = source.split(/[?#]/, 1)[0]?.toLowerCase() ?? '';
+  switch (path.match(/\.([a-z0-9]+)$/)?.[1]) {
+    case 'mp4':
+    case 'webm':
+    case 'm4v':
+    case 'mov':
+    case 'ogv':
+      return 'video';
+    case 'mp3':
+    case 'wav':
+    case 'm4a':
+      return 'audio';
+    case 'png':
+    case 'jpg':
+    case 'jpeg':
+    case 'gif':
+    case 'webp':
+      return 'image';
+    default:
+      return undefined;
+  }
+};
+
+const hasMediaSignature = async (blob: Blob, mimeType: string): Promise<boolean> => {
   const bytes = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
   const ascii = (start: number, end: number) => String.fromCharCode(...bytes.slice(start, end));
   switch (mimeType) {
@@ -78,21 +131,35 @@ const hasImageSignature = async (blob: Blob, mimeType: string): Promise<boolean>
     }
     case 'image/webp':
       return ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP';
+    case 'video/mp4':
+    case 'audio/mp4':
+      // ISO Base Media: a `ftyp` box at offset 4 (mp4/m4a).
+      return ascii(4, 8) === 'ftyp';
+    case 'video/webm':
+      // EBML magic 0x1A 0x45 0xDF 0xA3 (webm is an EBML container).
+      return bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3;
+    case 'audio/mpeg':
+      // ID3 tag at the start of the stream.
+      return ascii(0, 3) === 'ID3';
+    case 'audio/wav':
+      return ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WAVE';
     default:
       return false;
   }
 };
 
-const validateImageBlob = async (blob: Blob, mimeType: string): Promise<void> => {
-  if (!SUPPORTED_IMAGE_MIME_TYPES.has(mimeType)) throw new Error('Unsupported image type');
-  if (blob.size > MAX_MARKDOWN_IMAGE_BYTES) throw new Error('Image is too large');
-  if (!await hasImageSignature(blob, mimeType)) throw new Error('Unsupported image data');
+const validateMediaBlob = async (blob: Blob, mimeType: string): Promise<void> => {
+  if (!SUPPORTED_MEDIA_MIME_TYPES.has(mimeType)) throw new Error('Unsupported image type');
+  const kind = getMarkdownMediaKindFromMime(mimeType);
+  if (!kind) throw new Error('Unsupported image type');
+  if (blob.size > MARKDOWN_MEDIA_MAX_BYTES[kind]) throw new Error('Image is too large');
+  if (!await hasMediaSignature(blob, mimeType)) throw new Error('Unsupported image data');
 };
 
 const validateDataImage = async (source: string): Promise<void> => {
   const match = /^data:(image\/(?:png|jpeg|gif|webp));base64,([\s\S]*)$/i.exec(source);
   if (!match?.[1] || match[2] === undefined) throw new Error('Invalid image data URL');
-  if (match[2].length > Math.ceil(MAX_MARKDOWN_IMAGE_BYTES * 4 / 3) + 4) throw new Error('Image is too large');
+  if (match[2].length > Math.ceil(MARKDOWN_MEDIA_MAX_BYTES.image * 4 / 3) + 4) throw new Error('Image is too large');
   let binary: string;
   try {
     binary = atob(match[2]);
@@ -100,7 +167,7 @@ const validateDataImage = async (source: string): Promise<void> => {
     throw new Error('Invalid image data URL');
   }
   const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-  await validateImageBlob(new Blob([bytes]), match[1].toLowerCase());
+  await validateMediaBlob(new Blob([bytes]), match[1].toLowerCase());
 };
 
 export const isLocalMarkdownImageSource = (source: string): boolean => (
@@ -223,8 +290,9 @@ export const resolveWorkspaceMarkdownImageSource = async (
   });
   if (!statResponse.ok) throw new Error(`Unable to inspect image (${statResponse.status})`);
   const stat = await statResponse.json() as { isFile?: boolean; size?: number };
+  const kind = getMarkdownMediaKindFromSource(localPath) ?? 'image';
   if (!stat.isFile) throw new Error('Image path is not a file');
-  if (typeof stat.size === 'number' && stat.size > MAX_MARKDOWN_IMAGE_BYTES) {
+  if (typeof stat.size === 'number' && stat.size > MARKDOWN_MEDIA_MAX_BYTES[kind]) {
     throw new Error('Image is too large');
   }
 
@@ -235,13 +303,14 @@ export const resolveWorkspaceMarkdownImageSource = async (
   if (!response.ok) throw new Error(`Unable to load image (${response.status})`);
 
   const mimeType = (response.headers.get('content-type') ?? '').split(';', 1)[0]?.toLowerCase() ?? '';
+  const blobKind = getMarkdownMediaKindFromMime(mimeType) ?? getMarkdownMediaKindFromSource(localPath) ?? 'image';
   const contentLength = Number(response.headers.get('content-length'));
-  if (Number.isFinite(contentLength) && contentLength > MAX_MARKDOWN_IMAGE_BYTES) {
+  if (Number.isFinite(contentLength) && contentLength > MARKDOWN_MEDIA_MAX_BYTES[blobKind]) {
     throw new Error('Image is too large');
   }
 
   const blob = await response.blob();
-  await validateImageBlob(blob, mimeType);
+  await validateMediaBlob(blob, mimeType);
   throwIfAborted(signal);
   return blobToDataUrl(blob);
 };

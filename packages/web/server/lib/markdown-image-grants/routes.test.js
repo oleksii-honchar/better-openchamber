@@ -11,6 +11,39 @@ const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
   'base64',
 );
+const MIB = 1024 * 1024;
+
+// Container signatures mirror the renderer's `hasMediaSignature` (Task 6) — see
+// the parity test below which asserts both sides agree on caps + MIME set.
+const MP4 = Buffer.concat([Buffer.from([0x00, 0x00, 0x00, 0x18]), Buffer.from('ftypmp42')]);
+const WEBM = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.from('webm')]);
+const MP3 = Buffer.from('ID3\x04\x00\x00\x00\x00\x00\x00');
+const WAV = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WAVE')]);
+// m4a is an ISO Base Media container (audio/mp4) — `ftyp` box at offset 4,
+// same signature as mp4. The renderer (`markdownImageAssets.ts`) accepts it;
+// the grant route must too (reviewer Issue #1).
+const M4A = Buffer.concat([Buffer.from([0x00, 0x00, 0x00, 0x20]), Buffer.from('ftypM4A ')]);
+
+// Grant-route caps (this package) — mirrored from the renderer (Task 6) numbers.
+const GRANT_ROUTE_MEDIA_SIZE_CAPS = {
+  image: 10 * MIB,
+  video: 50 * MIB,
+  audio: 20 * MIB,
+};
+// MIME types the grant route can classify by extension (image kinds keep the
+// existing `hasImageSignature` set; video/audio added per Task 7).
+const GRANT_ROUTE_MEDIA_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'video/mp4',
+  'video/webm',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/mp4', // m4a container (ftyp signature)
+]);
+
 const roots = [];
 
 afterEach(async () => {
@@ -18,7 +51,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
 });
 
-const createFixture = async ({ sources, markdown } = {}) => {
+const createFixture = async ({ sources, markdown, contents } = {}) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'openchamber-session-assets-'));
   roots.push(root);
   const approvedTempRoot = path.join(root, 'opencode');
@@ -31,6 +64,14 @@ const createFixture = async ({ sources, markdown } = {}) => {
   await fs.writeFile(defaultPath, PNG);
   const requestedSources = sources ?? [new URL(`file://${defaultPath}`).toString()];
   const text = markdown ?? requestedSources.map((source) => `![image](${source})`).join('\n');
+  if (contents) {
+    await Promise.all([...contents.entries()].map(async ([filename, data]) => {
+      const target = path.resolve(directory, filename);
+      if (!isUnder(target, directory)) return;
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.writeFile(target, data);
+    }));
+  }
   const fetchMock = vi.fn(async () => new Response(JSON.stringify({
     info: { id: 'msg_1', role: 'assistant' },
     parts: [{ type: 'text', text }],
@@ -72,6 +113,11 @@ const prepare = (app, directory, sources) => request(app)
   .post('/api/openchamber/sessions/ses_1/markdown-image-grants')
   .send({ directory, messageId: 'msg_1', sources })
   .expect(200);
+
+const isUnder = (target, root) => {
+  const relative = path.relative(root, target);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+};
 
 describe('session image assets', () => {
   it('prepares workspace and OpenCode temporary images with one message fetch', async () => {
@@ -217,5 +263,214 @@ describe('session image assets', () => {
       { source: 'invalid.png', status: 'error' },
       { source: 'linked.png', status: 'error' },
     ]);
+  });
+});
+
+describe('session media assets (Task 7)', () => {
+  const MEDIA = [
+    { filename: 'clip.mp4', bytes: MP4, kind: 'video', mime: 'video/mp4' },
+    { filename: 'clip.webm', bytes: WEBM, kind: 'video', mime: 'video/webm' },
+    { filename: 'song.mp3', bytes: MP3, kind: 'audio', mime: 'audio/mpeg' },
+    { filename: 'song.wav', bytes: WAV, kind: 'audio', mime: 'audio/wav' },
+  ];
+
+  const asFileSource = (pathName) => new URL(`file://${pathName}`).toString();
+
+  it('prepares mp4/webm/mp3/wav sources under approvedTempRoot with outsideFileGrant', async () => {
+    const fixture = await createFixture({ markdown: 'no default source' });
+    const sources = MEDIA.map(({ filename, bytes }) => {
+      const target = path.join(fixture.approvedTempRoot, filename);
+      return { filename, bytes, target, source: asFileSource(target) };
+    });
+    await Promise.all(sources.map(({ target, bytes }) => fs.writeFile(target, bytes)));
+    fixture.fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      info: { id: 'msg_1', role: 'assistant' },
+      parts: [{ type: 'text', text: sources.map(({ source }) => `![media](${source})`).join('\n') }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+
+    const response = await prepare(
+      fixture.app,
+      fixture.directory,
+      sources.map(({ source }) => source),
+    );
+
+    expect(fixture.fullReadCount()).toBe(0);
+    expect(response.body.results).toHaveLength(4);
+    for (const { source, target } of sources) {
+      const canonical = await fs.realpath(target);
+      const result = response.body.results.find((entry) => entry.source === source);
+      expect(result).toEqual(expect.objectContaining({
+        source,
+        status: 'ready',
+        path: canonical,
+        outsideFileGrant: expect.any(String),
+        expiresAt: expect.any(Number),
+      }));
+    }
+  });
+
+  it('enforces per-kind size caps with 30 MiB video ready and >50 MiB/>20 MiB/>10 MiB error', async () => {
+    const fixture = await createFixture({ markdown: 'no default source' });
+    // Use valid container signatures so only the size cap decides the outcome.
+    // (The ready 30 MiB video must pass signature; the >cap files fail on size.)
+    const withSignature = (bytes, ...header) => {
+      const buffer = Buffer.alloc(bytes);
+      header.forEach((part, index) => part.copy(buffer, index * 12));
+      return buffer;
+    };
+    const MP4_HEADER = Buffer.concat([Buffer.from([0x00, 0x00, 0x00, 0x18]), Buffer.from('ftypmp42'), Buffer.alloc(4)]);
+    const MP3_HEADER = Buffer.from('ID3\x04\x00\x00\x00\x00\x00\x00');
+    const PNG_HEADER = Buffer.concat([Buffer.from([0x89]), Buffer.from('PNG\r\n\x1a\n'), Buffer.alloc(4)]);
+    const cases = [
+      { filename: 'ok-30mib.mp4', bytes: withSignature(30 * MIB, MP4_HEADER), kind: 'video', expect: 'ready' },
+      // Strictly greater than the cap (the grant rejects `size > cap`).
+      { filename: 'too-big-50mib.mp4', bytes: withSignature(50 * MIB + 1, MP4_HEADER), kind: 'video', expect: 'error' },
+      { filename: 'too-big-20mib.mp3', bytes: withSignature(20 * MIB + 1, MP3_HEADER), kind: 'audio', expect: 'error' },
+      { filename: 'too-big-10mib.png', bytes: withSignature(10 * MIB + 1, PNG_HEADER), kind: 'image', expect: 'error' },
+    ];
+    const sources = cases.map(({ filename, bytes }) => {
+      const target = path.join(fixture.approvedTempRoot, filename);
+      return { filename, bytes, target, source: asFileSource(target) };
+    });
+    await Promise.all(sources.map(({ target, bytes }) => fs.writeFile(target, bytes)));
+    fixture.fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      info: { id: 'msg_1', role: 'assistant' },
+      parts: [{ type: 'text', text: sources.map(({ source }) => `![media](${source})`).join('\n') }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+
+    const response = await prepare(
+      fixture.app,
+      fixture.directory,
+      sources.map(({ source }) => source),
+    );
+
+    for (let index = 0; index < cases.length; index += 1) {
+      const entry = response.body.results.find((result) => result.source === sources[index].source);
+      if (cases[index].expect === 'ready') {
+        expect(entry).toEqual(expect.objectContaining({
+          source: sources[index].source,
+          status: 'ready',
+          path: await fs.realpath(sources[index].target),
+          outsideFileGrant: expect.any(String),
+          expiresAt: expect.any(Number),
+        }));
+      } else {
+        expect(entry).toEqual({ source: sources[index].source, status: 'error' });
+      }
+    }
+  });
+
+  it('prepares m4a (audio/mp4, ftyp signature) sources under approvedTempRoot', async () => {
+    const fixture = await createFixture({ markdown: 'no default source' });
+    const target = path.join(fixture.approvedTempRoot, 'song.m4a');
+    await fs.writeFile(target, M4A);
+    const source = asFileSource(target);
+    fixture.fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      info: { id: 'msg_1', role: 'assistant' },
+      parts: [{ type: 'text', text: `![media](${source})` }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+
+    const response = await prepare(fixture.app, fixture.directory, [source]);
+
+    expect(response.body.results).toEqual([expect.objectContaining({
+      source,
+      status: 'ready',
+      path: await fs.realpath(target),
+      outsideFileGrant: expect.any(String),
+      expiresAt: expect.any(Number),
+    })]);
+  });
+
+  it('rejects trimmed audio extensions (ogg/oga/aac/flac → error, no dead promise)', async () => {
+    const fixture = await createFixture({ markdown: 'no default source' });
+    // Plausible native-container bytes for each extension — these are rejected
+    // by classification alone (the extensions are trimmed from KIND_BY_EXTENSION
+    // on both grant route and renderer, so no signature/MIME support is claimed).
+    const cases = [
+      { filename: 'track.ogg', bytes: Buffer.from('OggS\x00\x02', 'ascii') },
+      { filename: 'track.oga', bytes: Buffer.from('OggS\x00\x02', 'ascii') },
+      { filename: 'track.aac', bytes: Buffer.from([0xff, 0xf1, 0x50, 0x80]) },
+      { filename: 'track.flac', bytes: Buffer.from('fLaC', 'ascii') },
+    ];
+    const sources = cases.map(({ filename, bytes }) => {
+      const target = path.join(fixture.approvedTempRoot, filename);
+      return { target, bytes, source: asFileSource(target) };
+    });
+    await Promise.all(sources.map(({ target, bytes }) => fs.writeFile(target, bytes)));
+    fixture.fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      info: { id: 'msg_1', role: 'assistant' },
+      parts: [{ type: 'text', text: sources.map(({ source }) => `![media](${source})`).join('\n') }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+
+    const response = await prepare(
+      fixture.app,
+      fixture.directory,
+      sources.map(({ source }) => source),
+    );
+
+    expect(response.body.results).toEqual(
+      sources.map(({ source }) => ({ source, status: 'error' })),
+    );
+  });
+
+  it('rejects a signature mismatch (PNG bytes labeled .mp4)', async () => {
+    const fixture = await createFixture({ markdown: 'no default source' });
+    const target = path.join(fixture.approvedTempRoot, 'fake.mp4');
+    await fs.writeFile(target, PNG);
+    const source = asFileSource(target);
+    fixture.fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      info: { id: 'msg_1', role: 'assistant' },
+      parts: [{ type: 'text', text: `![media](${source})` }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+
+    const response = await prepare(fixture.app, fixture.directory, [source]);
+
+    expect(response.body.results).toEqual([{ source, status: 'error' }]);
+  });
+
+  it('rejects an unsupported extension/kind with error, never a throw', async () => {
+    const fixture = await createFixture({ markdown: 'no default source' });
+    const target = path.join(fixture.approvedTempRoot, 'file.exe');
+    await fs.writeFile(target, Buffer.from('MZ\x90\x00'));
+    const source = asFileSource(target);
+    fixture.fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      info: { id: 'msg_1', role: 'assistant' },
+      parts: [{ type: 'text', text: `![media](${source})` }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+
+    const response = await prepare(fixture.app, fixture.directory, [source]);
+
+    expect(response.body.results).toEqual([{ source, status: 'error' }]);
+  });
+
+  it('enforces containment/authority for media sources (outside root or unreferenced → error)', async () => {
+    const fixture = await createFixture({ markdown: 'no default source' });
+    const outsideTarget = path.join(fixture.root, 'outside.mp4');
+    await fs.writeFile(outsideTarget, MP4);
+    const outsideSource = asFileSource(outsideTarget);
+    const unreferenced = path.join(fixture.approvedTempRoot, 'unreferenced.mp4');
+    await fs.writeFile(unreferenced, MP4);
+    const unreferencedSource = asFileSource(unreferenced);
+    fixture.fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      info: { id: 'msg_1', role: 'assistant' },
+      parts: [{ type: 'text', text: `![outside](${outsideSource})` }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+
+    const response = await prepare(fixture.app, fixture.directory, [outsideSource, unreferencedSource]);
+
+    expect(response.body.results).toEqual([
+      { source: outsideSource, status: 'error' }, // outside approved root
+      { source: unreferencedSource, status: 'error' }, // not in markdownImageSources
+    ]);
+  });
+
+  it('parity: grant-route caps and media MIME set match the renderer (Task 6)', async () => {
+    // Renderer constants — imported statically from the UI package (Task 6).
+    const { MARKDOWN_MEDIA_MAX_BYTES, SUPPORTED_MEDIA_MIME_TYPES } = await import(
+      '@/components/chat/markdown/markdownImageAssets'
+    );
+
+    expect(GRANT_ROUTE_MEDIA_SIZE_CAPS).toEqual(MARKDOWN_MEDIA_MAX_BYTES);
+    expect([...GRANT_ROUTE_MEDIA_MIME_TYPES].sort()).toEqual([...SUPPORTED_MEDIA_MIME_TYPES].sort());
   });
 });

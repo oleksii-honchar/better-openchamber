@@ -1,6 +1,5 @@
 import React from 'react';
 import { toast } from 'sonner';
-import { Icon } from '@/components/icon/Icon';
 import { useEffectiveDirectory } from '@/hooks/useEffectiveDirectory';
 import { useI18n } from '@/lib/i18n';
 import {
@@ -10,6 +9,7 @@ import {
 } from '@/lib/runtime-auth';
 import { getRuntimeApiBaseUrl } from '@/lib/runtime-switch';
 import { isVSCodeRuntime } from '@/lib/desktop';
+import { MarkdownMediaThumbnailBody } from './markdownImageGalleryMedia';
 import type { ToolPopupContent } from './message/types';
 import {
   extractMarkdownImageCandidates,
@@ -80,7 +80,8 @@ const MarkdownImageThumbnail: React.FC<{
   onShowPopup,
 }) => {
   const { t } = useI18n();
-  const thumbnailRef = React.useRef<HTMLButtonElement>(null);
+  const thumbnailRef = React.useRef<HTMLDivElement | null>(null);
+  const buttonRef = React.useRef<HTMLButtonElement>(null);
   const [shouldLoad, setShouldLoad] = React.useState(false);
   const [image, setImage] = React.useState<{ url: string; status: 'loading' | 'ready' | 'error' }>({
     url: '',
@@ -89,7 +90,7 @@ const MarkdownImageThumbnail: React.FC<{
   const local = isLocalMarkdownImageSource(candidate.source);
 
   React.useEffect(() => {
-    const thumbnail = thumbnailRef.current;
+    const thumbnail = (thumbnailRef.current ?? buttonRef.current);
     if (!thumbnail || shouldLoad) return;
     if (typeof IntersectionObserver === 'undefined') {
       setShouldLoad(true);
@@ -154,45 +155,49 @@ const MarkdownImageThumbnail: React.FC<{
     });
   }, [candidate.filename, image, onShowPopup, t]);
 
+  const sharedClassName = 'w-[100px] shrink-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-focus-ring)]';
+  const sharedDataAttributes = {
+    'data-openchamber-markdown-image-action': 'true',
+    'data-openchamber-markdown-image-source': candidate.source,
+    'data-openchamber-markdown-image-filename': candidate.filename,
+  };
+  const mediaBody = (
+    <MarkdownMediaThumbnailBody
+      image={image}
+      candidate={candidate}
+      onImageLoad={() => setImage((current) => ({ ...current, status: 'ready' }))}
+      onImageError={() => setImage({ url: '', status: 'error' })}
+      unavailableLabel={t('chat.media.unavailable')}
+    />
+  );
+
+  if (candidate.kind !== 'image') {
+    // Video/audio play inline through the native controls; there is no popup
+    // preview, so the gallery frame is a plain box (not the image preview
+    // button). The action/source/filename data attributes are preserved.
+    return (
+      <div
+        ref={thumbnailRef}
+        className={sharedClassName}
+        aria-label={candidate.filename}
+        {...sharedDataAttributes}
+      >
+        {mediaBody}
+      </div>
+    );
+  }
+
   return (
     <button
-      ref={thumbnailRef}
+      ref={buttonRef}
       type="button"
-      className="w-[100px] shrink-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-focus-ring)]"
+      className={sharedClassName}
       aria-label={candidate.filename}
       disabled={image.status === 'loading'}
       onClick={openPreview}
-      data-openchamber-markdown-image-action="true"
-      data-openchamber-markdown-image-source={candidate.source}
-      data-openchamber-markdown-image-filename={candidate.filename}
+      {...sharedDataAttributes}
     >
-      <span className="flex h-[72px] w-[100px] items-center justify-center overflow-hidden rounded-lg border border-border/40 bg-muted/10">
-        {image.url && image.status !== 'error' ? (
-          <img
-            src={image.url}
-            alt={candidate.filename}
-            className="h-full w-full object-contain"
-            loading="lazy"
-            decoding="async"
-            referrerPolicy="no-referrer"
-            onLoad={() => setImage((current) => ({ ...current, status: 'ready' }))}
-            onError={() => setImage({ url: '', status: 'error' })}
-            data-openchamber-markdown-image="true"
-            data-openchamber-markdown-image-thumbnail="true"
-            data-openchamber-markdown-image-state={image.status}
-          />
-        ) : (
-          <Icon name="file-image" className="h-5 w-5 text-muted-foreground" />
-        )}
-      </span>
-      <span
-        className="mt-1 flex w-[100px] items-center justify-center gap-1 text-muted-foreground"
-        title={candidate.filename}
-        data-openchamber-markdown-image-caption="true"
-      >
-        <Icon name="file-image" className="h-3 w-3 shrink-0" />
-        <span className="min-w-0 truncate typography-meta">{candidate.filename}</span>
-      </span>
+      {mediaBody}
     </button>
   );
 };

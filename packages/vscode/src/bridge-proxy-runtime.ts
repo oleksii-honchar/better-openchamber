@@ -56,7 +56,11 @@ const isSseProxyPath = (requestPath: string): boolean => {
 };
 
 type ProxyRuntimeDeps = {
-  tryHandleLocalFsProxy: (method: string, requestPath: string) => Promise<ApiProxyResponsePayload | null>;
+  tryHandleLocalFsProxy: (
+    method: string,
+    requestPath: string,
+    options?: { bodyBase64?: string; headers?: Record<string, string>; apiUrl?: string | null },
+  ) => Promise<ApiProxyResponsePayload | null>;
   buildUnavailableApiResponse: () => ApiProxyResponsePayload;
   sanitizeForwardHeaders: (input: Record<string, string> | undefined) => Record<string, string>;
   collectHeaders: (headers: Headers) => Record<string, string>;
@@ -153,7 +157,11 @@ export async function handleProxyBridgeMessage(
         return { id, type, success: true, data };
       }
 
-      const localFsResponse = await deps.tryHandleLocalFsProxy(normalizedMethod, normalizedPath);
+      const localFsResponse = await deps.tryHandleLocalFsProxy(normalizedMethod, normalizedPath, {
+        bodyBase64,
+        headers,
+        apiUrl: ctx?.manager ? await waitForApiUrl(ctx.manager) : null,
+      });
       if (localFsResponse) {
         return { id, type, success: true, data: localFsResponse };
       }

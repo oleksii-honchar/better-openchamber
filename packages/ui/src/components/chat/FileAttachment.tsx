@@ -14,6 +14,7 @@ import { useI18n } from '@/lib/i18n';
 import { useDeviceInfo } from '@/lib/device';
 
 import type { ToolPopupContent } from './message/types';
+import { FilePartMediaBody } from './filePartMedia';
 
 const FileAttachmentButton = memo(() => {
   const { t } = useI18n();
@@ -783,6 +784,22 @@ export const MessageFilesDisplay = memo(({ files, onShowPopup, compact = false }
                 {sizeText && <p className="text-xs opacity-80">{sizeText}</p>}
               </div>
             </div>
+          );
+        }
+
+        const isMedia = file.mime?.startsWith('video/') || file.mime?.startsWith('audio/');
+        const mediaKind = file.mime?.startsWith('video/') ? 'video' as const : file.mime?.startsWith('audio/') ? 'audio' as const : undefined;
+
+        if (isMedia && mediaKind && file.url) {
+          return (
+            <FilePartMediaBody
+              key={file.url || `${fileName}-${index}`}
+              kind={mediaKind}
+              url={file.url}
+              filename={fileName}
+              size={file.size}
+              unavailableLabel={t('chat.media.unavailable')}
+            />
           );
         }
 
