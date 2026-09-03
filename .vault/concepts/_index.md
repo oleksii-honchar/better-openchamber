@@ -20,3 +20,6 @@ Key domain concepts and mental models for understanding the better-openchamber f
 
 ### Rebase Landscape
 - [[0003-upstream-divergence.concept]] — Divergence state: 4 commits vs 197 behind, 6 releases missed, conflict zone matrix
+
+### Media Rendering
+- [[0004-media-posting-pipeline.concept]] — Media posting pipeline: FilePart transport, grant route generalization, VS Code temp-dir grants

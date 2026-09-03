@@ -27,3 +27,7 @@ Architecture decisions for the better-openchamber fork, including forking strate
 ### UI & Rendering
 - [[0008-tool-use-log-format.adr]] — **ADR-0008 (accepted):** Format `tool_use` collapsed headers as `Tool Use "<innerName>"` with unchanged `arrow-right` icon
 - [[0009-rename-meta-tools.adr]] — **ADR-0009 (accepted):** Rename meta tools to meta_search/meta_use for log clarity
+
+- [[0011-generalize-markdown-grant-route.adr.md]] — **ADR-0011 (accepted):** Generalize the markdown grant route instead of a parallel media route
+- [[0012-vscode-temp-dir-media-grant-forwarding.adr.md]] — **ADR-0012 (accepted):** VS Code resolves temp-dir media via forwarded path-bound grants
+- [[0013-shared-media-caps-and-signatures.adr.md]] — **ADR-0013 (accepted):** Shared media size caps + signature sniffing at grant + renderer
