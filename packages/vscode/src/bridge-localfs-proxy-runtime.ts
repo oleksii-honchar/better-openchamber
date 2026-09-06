@@ -1,7 +1,21 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { getFsMimeType, normalizeFsPath, resolveFileReadPath, type FsReadPathResolution } from './bridge-fs-helpers-runtime';
+import {
+  getFsMimeType,
+  isFsPathInsideWorkspace,
+  normalizeFsPath,
+  resolveFileReadPath,
+  type FsReadPathResolution,
+} from './bridge-fs-helpers-runtime';
+
+// ---------------------------------------------------------------------------
+// Any-path media (ADR-1): always on, no env flag
+//
+// Outside-workspace non-temp media sources ALWAYS mint a path-bound grant
+// scoped to the resolved path (allowedRoot=null). The grant is time-boxed
+// (10 min) and requires an exact canonical-path match plus a valid token.
+// ---------------------------------------------------------------------------
 
 type ApiProxyResponsePayload = {
   status: number;
@@ -56,15 +70,18 @@ const normalizeFsProxyPath = (pathname: string): '/api/fs/stat' | '/api/fs/read'
 };
 
 // ---------------------------------------------------------------------------
-// Temp-dir grant store (ADR-5)
+// Temp-dir grant store (ADR-5/ADR-1)
 //
 // The VS Code extension is a privilege boundary. `resolveFileReadPath` stays
 // workspace-only; the local fs bridge is NOT widened to arbitrary temp-dir
-// paths. Instead the grants route mints a path-bound temp-dir grant for
-// outside-workspace media under `approvedTempRoot` (os.tmpdir()/opencode), and
-// `/api/fs/raw` honors ONLY a path that exactly matches that grant's canonical
-// path. Every grant is time-boxed (10 min, mirroring the server's
+// paths. Instead the grants route mints a path-bound grant for outside-workspace
+// media. Every grant is time-boxed (10 min, mirroring the server's
 // OUTSIDE_FILE_GRANT_TTL_MS) and scoped to raw reads.
+//
+// Any-path media is ALWAYS ON (ADR-1): the same path-bound, time-boxed grant is
+// minted for ANY resolved absolute path (allowedRoot=null) so any-path media is
+// served identically, still never widening the workspace bridge and still
+// requiring an exact canonical-path match plus a valid token.
 // ---------------------------------------------------------------------------
 
 const TEMP_DIR_GRANT_TTL_MS = 10 * 60 * 1000;
@@ -91,11 +108,11 @@ const isWithin = (target: string, root: string): boolean => {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 };
 
-const mintTempDirGrant = (targetPath: string): string | null => {
+const mintTempDirGrant = (targetPath: string, allowedRoot: string | null = approvedTempRoot): string | null => {
   const raw = typeof targetPath === 'string' ? targetPath.trim() : '';
   if (!raw) return null;
   const canonicalPath = path.resolve(raw);
-  if (!isWithin(canonicalPath, approvedTempRoot)) return null;
+  if (allowedRoot && !isWithin(canonicalPath, allowedRoot)) return null;
   pruneTempDirGrants();
   const token = typeof globalThis.crypto?.randomUUID === 'function'
     ? globalThis.crypto.randomUUID()
@@ -107,9 +124,11 @@ const mintTempDirGrant = (targetPath: string): string | null => {
 const resolveTempDirRawGrant = async ({
   token,
   targetPath,
+  allowedRoot = approvedTempRoot,
 }: {
   token: string | undefined;
   targetPath: string;
+  allowedRoot?: string | null;
 }): Promise<{ ok: true; canonicalPath: string } | { ok: false; status: number; error: string }> => {
   if (!token || !token.trim()) {
     return { ok: false, status: 403, error: 'Outside workspace file access requires a grant' };
@@ -121,7 +140,7 @@ const resolveTempDirRawGrant = async ({
   }
   try {
     const canonicalPath = await fs.promises.realpath(targetPath);
-    if (!isWithin(canonicalPath, approvedTempRoot) || canonicalPath !== grant.canonicalPath) {
+    if ((allowedRoot && !isWithin(canonicalPath, allowedRoot)) || canonicalPath !== grant.canonicalPath) {
       return { ok: false, status: 403, error: 'Outside workspace file grant does not match requested path' };
     }
     return { ok: true, canonicalPath };
@@ -231,7 +250,7 @@ const handleMarkdownImageGrantsProxy = async (
     if (isWithin(resolved, approvedTempRoot)) {
       // Outside-workspace temp media: keep the server's authority but serve the
       // bytes through a path-bound temp-dir grant scoped to approvedTempRoot.
-      const token = mintTempDirGrant(resolved);
+      const token = mintTempDirGrant(resolved, approvedTempRoot);
       if (!token) {
         adaptedResults.push({ source, status: 'error' });
         continue;
@@ -244,11 +263,28 @@ const handleMarkdownImageGrantsProxy = async (
       });
       continue;
     }
-    // Workspace source: preserve the server result, but drop any outside grant —
-    // workspace media flows through the existing local fs bridge.
-    const workspaceResult = { ...result };
-    delete workspaceResult.outsideFileGrant;
-    adaptedResults.push(workspaceResult);
+    if (isFsPathInsideWorkspace(resolved, body.directory)) {
+      // Workspace source: preserve the server result, but drop any outside grant —
+      // workspace media flows through the existing local fs bridge.
+      const workspaceResult = { ...result };
+      delete workspaceResult.outsideFileGrant;
+      adaptedResults.push(workspaceResult);
+      continue;
+    }
+    // Any-path media (ADR-1): always-on — mint a path-bound, time-boxed grant
+    // for the resolved absolute path (allowedRoot=null) so it serves through the
+    // raw bridge without widening the workspace surface.
+    const token = mintTempDirGrant(resolved, null);
+    if (!token) {
+      adaptedResults.push({ source, status: 'error' });
+      continue;
+    }
+    adaptedResults.push({
+      source,
+      status: 'ready',
+      path: resolved,
+      outsideFileGrant: token,
+    });
   }
 
   return {
@@ -282,12 +318,14 @@ export const tryHandleLocalFsProxy = async (method: string, requestPath: string,
   const targetPath = parsed.searchParams.get('path') || '';
   const optional = parsed.searchParams.get('optional') === 'true';
 
-  // Temp-dir grant path (ADR-5): honor ONLY a path-bound grant scoped to
-  // approvedTempRoot, without widening resolveFileReadPath (workspace-only).
+  // Temp-dir/any-path grant path (ADR-5/ADR-1): honor ONLY a path-bound grant
+  // — any path the grant names — without widening resolveFileReadPath
+  // (workspace-only).
   if (parsed.searchParams.get('allowOutsideWorkspace') === 'true') {
     const grantResolution = await resolveTempDirRawGrant({
       token: parsed.searchParams.get('outsideFileGrant') ?? undefined,
       targetPath,
+      allowedRoot: null,
     });
     if (grantResolution.ok) {
       if (fsProxyPath !== '/api/fs/raw' && fsProxyPath !== '/api/fs/stat') {

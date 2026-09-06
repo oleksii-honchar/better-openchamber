@@ -1,4 +1,4 @@
-import { describe, expect, it, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, expect, it, mock, beforeEach, afterEach, setSystemTime } from 'bun:test';
 
 // ---------------------------------------------------------------------------
 // Task 8 — VS Code temp-dir grant forwarding/adaptation (ADR-5)
@@ -259,5 +259,94 @@ describe('bridge local fs proxy', () => {
   it('leaves non-media / unknown proxy paths untouched (returns null)', async () => {
     const response = await tryHandleLocalFsProxy('GET', '/api/unknown');
     expect(response).toBeNull();
+  });
+
+  // Task 2: always-on any-path media (ADR-1) — no env flag
+  it('mints a path-bound grant for an outside-workspace non-temp ready source (no env var)', async () => {
+    const outsideFile = '/etc/media/image.png';
+    withServerGrants([
+      { source: outsideFile, status: 'ready', path: outsideFile, outsideWorkspace: true },
+    ]);
+
+    const response = await postGrants([outsideFile]);
+
+    const payload = JSON.parse(Buffer.from(response?.bodyBase64 ?? '', 'base64').toString('utf8'));
+    expect(response?.status).toBe(200);
+    expect(payload.results?.[0]?.status).toBe('ready');
+    expect(typeof payload.results?.[0]?.outsideFileGrant).toBe('string');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Always-on any-path media (ADR-1)
+//
+// Outside-workspace non-temp media sources ALWAYS mint a path-bound grant
+// scoped to the resolved path (allowedRoot=null). The grant is time-boxed
+// (10 min) and requires an exact canonical-path match plus a valid token.
+// No env flag is needed — this behavior is unconditional.
+// ---------------------------------------------------------------------------
+
+describe('Always-on any-path media (ADR-1)', () => {
+  const anyPathFile = '/etc/media/image.png';
+  const anyPathReady = {
+    source: anyPathFile,
+    status: 'ready',
+    path: anyPathFile,
+    outsideWorkspace: true,
+  };
+
+  it('mints a path-bound grant for an any-path `ready` result (path = canonical)', async () => {
+    withServerGrants([anyPathReady]);
+
+    const response = await postGrants([anyPathFile]);
+
+    const payload = JSON.parse(Buffer.from(response?.bodyBase64 ?? '', 'base64').toString('utf8'));
+    expect(response?.status).toBe(200);
+    expect(payload.results?.[0]?.status).toBe('ready');
+    expect(payload.results?.[0]?.path).toBe(anyPathFile);
+    expect(typeof payload.results?.[0]?.outsideFileGrant).toBe('string');
+  });
+
+  it('/api/fs/raw serves any-path bytes through the path-bound grant; no token → 403', async () => {
+    existingTempFiles.set(anyPathFile, Buffer.from('any-path-bytes'));
+    withServerGrants([anyPathReady]);
+
+    const grantResponse = await postGrants([anyPathFile]);
+    const payload = JSON.parse(Buffer.from(grantResponse?.bodyBase64 ?? '', 'base64').toString('utf8'));
+    const token = payload.results?.[0]?.outsideFileGrant;
+    expect(typeof token).toBe('string');
+
+    const served = await tryHandleLocalFsProxy('GET', rawUrlFor(anyPathFile, token));
+    expect(served?.status).toBe(200);
+    expect(Buffer.from(served?.bodyBase64 ?? '', 'base64').toString()).toBe('any-path-bytes');
+
+    const denied = await tryHandleLocalFsProxy('GET', rawUrlFor(anyPathFile, undefined));
+    expect(denied?.status).toBe(403);
+  });
+
+  it('grant TTL/expiry unchanged (expired token → 403)', async () => {
+    existingTempFiles.set(anyPathFile, Buffer.from('any-path-bytes'));
+    withServerGrants([anyPathReady]);
+
+    const grantResponse = await postGrants([anyPathFile]);
+    const payload = JSON.parse(Buffer.from(grantResponse?.bodyBase64 ?? '', 'base64').toString('utf8'));
+    const token = payload.results?.[0]?.outsideFileGrant;
+    expect(typeof token).toBe('string');
+
+    setSystemTime(Date.now() + 600_001);
+    try {
+      const expired = await tryHandleLocalFsProxy('GET', rawUrlFor(anyPathFile, token));
+      expect(expired?.status).toBe(403);
+    } finally {
+      setSystemTime();
+    }
+  });
+
+  it('non-grant /api/fs/raw outside workspace still 403 (regression)', async () => {
+    existingTempFiles.set(anyPathFile, Buffer.from('any-path-bytes'));
+
+    const response = await tryHandleLocalFsProxy('GET', rawUrlFor(anyPathFile, undefined));
+
+    expect(response?.status).toBe(403);
   });
 });

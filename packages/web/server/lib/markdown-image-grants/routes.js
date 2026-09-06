@@ -282,7 +282,7 @@ const fetchMessage = async ({ sessionId, messageId, directory, buildOpenCodeUrl,
   return message?.info && Array.isArray(message.parts) ? message : null;
 };
 
-const inspectMediaSource = async ({ source, directory, approvedTempRoot, fsPromises, path }) => {
+const inspectMediaSource = async ({ source, directory, fsPromises, path }) => {
   const parsed = parseFileSource(source);
   if (!parsed) return { status: 'error' };
   const kind = classifyMediaKind(parsed);
@@ -290,15 +290,12 @@ const inspectMediaSource = async ({ source, directory, approvedTempRoot, fsPromi
   const sourcePath = path.isAbsolute(parsed) ? parsed : path.resolve(directory, parsed);
   const workspaceRoot = path.resolve(directory);
   const outsideWorkspace = !isWithin(path.resolve(sourcePath), workspaceRoot, path);
-  const root = outsideWorkspace ? approvedTempRoot : workspaceRoot;
 
   try {
-    // Resolve symlinks before comparing roots; lexical prefixes are not an authorization boundary.
-    const [canonicalRoot, canonicalPath] = await Promise.all([
-      fsPromises.realpath(root),
-      fsPromises.realpath(sourcePath),
-    ]);
-    if (!isWithin(canonicalPath, canonicalRoot, path)) return { status: 'error' };
+    // Resolve symlinks before opening; lexical prefixes are not an authorization boundary.
+    // Containment is always relaxed (ADR-1): only regular-file, size, and
+    // container-signature validation below still applies.
+    const canonicalPath = await fsPromises.realpath(sourcePath);
     const handle = await fsPromises.open(canonicalPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
     try {
       const stats = await handle.stat();
@@ -333,7 +330,6 @@ export const registerMarkdownImageGrantRoutes = (app, dependencies) => {
     validateDirectoryPath,
     buildOpenCodeUrl,
     getOpenCodeAuthHeaders,
-    approvedTempRoot = path.join(os.tmpdir(), 'opencode'),
   } = dependencies;
 
   app.post(
@@ -376,7 +372,6 @@ export const registerMarkdownImageGrantRoutes = (app, dependencies) => {
             const inspected = await inspectMediaSource({
               source,
               directory: validatedDirectory.directory,
-              approvedTempRoot,
               fsPromises,
               path,
             });

@@ -47,9 +47,18 @@ The webview CSP permits `blob:` only for `worker-src` so shared UI parsers can r
 - `bridge-localfs-proxy-runtime.ts`
   - Local `/api/fs/read` and `/api/fs/raw` proxy helpers and shared proxy utility helpers.
   - Workspace-contained Markdown gallery images use these local filesystem
-    routes without calling the server grant route. Grant requests for OpenCode
-    temporary-directory images return an explicit unsupported response instead
-    of being forwarded to OpenCode.
+    routes without calling the server grant route. The Markdown image grants
+    proxy forwards grant requests to the OpenCode server's grants route, then
+    mints the matching local grant for each `ready` result: temp-directory
+    sources are scoped to the OpenCode temporary root, workspace sources drop
+    the grant, and outside-workspace sources get a path-bound grant.
+  - Outside-workspace Markdown media renders only through path-bound, time-boxed
+    grants (`/api/fs/raw?allowOutsideWorkspace=true` +
+    `outsideFileGrant`). Any-path media is ALWAYS ON (ADR-1): the bridge
+    mints a path-bound grant for any resolved absolute path, with no env flag
+    required. Grant semantics: a grant is bound to the exact canonical path of
+    the served file and expires after the 10-minute TTL. The server's grants
+    route provides authority; the bridge never widens the workspace fs bridge.
 
 - `bridge-proxy-runtime.ts`
   - Proxy route handlers (`api:proxy`, `api:session:message`) with injected helper dependencies.

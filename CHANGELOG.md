@@ -20,6 +20,7 @@ All notable changes to this project will be documented in this file.
 - UI: the btw panel's shadow is lighter, matching the composer.
 - Devices: re-pairing a phone (or logging in again) keeps the device's existing name in Connected Devices instead of resetting it to "OpenChamber Mobile".
 - Relay: paired devices no longer get logged out when the app restarts (for example during an update) while another local OpenChamber process is running — the restarted app keeps serving them instead of a bystander process taking over.
+- Chat: markdown media (images, video, and audio) referenced in an assistant message now renders from any absolute local path by default, with no opt-in setting. Files outside the workspace are still served through short-lived, path-bound grants.
 
 ## [1.20.0] - 2026-08-23
 

@@ -238,21 +238,7 @@ describe('session image assets', () => {
     expect(response.body.results).toEqual(sources.map((source) => ({ source, status: 'error' })));
   });
 
-  it('rejects paths outside the workspace and approved temporary root', async () => {
-    const fixture = await createFixture();
-    const outsidePath = path.join(fixture.root, 'outside.png');
-    await fs.writeFile(outsidePath, PNG);
-    const source = new URL(`file://${outsidePath}`).toString();
-    fixture.fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
-      info: { id: 'msg_1', role: 'assistant' },
-      parts: [{ type: 'text', text: `![outside](${source})` }],
-    }), { status: 200, headers: { 'content-type': 'application/json' } }));
-
-    const response = await prepare(fixture.app, fixture.directory, [source]);
-    expect(response.body.results).toEqual([{ source, status: 'error' }]);
-  });
-
-  it('rejects non-image bytes and symlink escapes per source', async () => {
+  it('rejects non-image bytes while serving symlink-resolved images per source', async () => {
     const fixture = await createFixture({ sources: ['invalid.png', 'linked.png'] });
     await fs.writeFile(path.join(fixture.directory, 'invalid.png'), 'not an image');
     await fs.writeFile(path.join(fixture.root, 'outside.png'), PNG);
@@ -261,7 +247,7 @@ describe('session image assets', () => {
     const response = await prepare(fixture.app, fixture.directory, fixture.sources);
     expect(response.body.results).toEqual([
       { source: 'invalid.png', status: 'error' },
-      { source: 'linked.png', status: 'error' },
+      expect.objectContaining({ source: 'linked.png', status: 'ready' }),
     ]);
   });
 });
@@ -443,7 +429,7 @@ describe('session media assets (Task 7)', () => {
     expect(response.body.results).toEqual([{ source, status: 'error' }]);
   });
 
-  it('enforces containment/authority for media sources (outside root or unreferenced → error)', async () => {
+  it('enforces authority for media sources (referenced outside → ready, unreferenced → error)', async () => {
     const fixture = await createFixture({ markdown: 'no default source' });
     const outsideTarget = path.join(fixture.root, 'outside.mp4');
     await fs.writeFile(outsideTarget, MP4);
@@ -459,7 +445,13 @@ describe('session media assets (Task 7)', () => {
     const response = await prepare(fixture.app, fixture.directory, [outsideSource, unreferencedSource]);
 
     expect(response.body.results).toEqual([
-      { source: outsideSource, status: 'error' }, // outside approved root
+      // Always-relaxed (ADR-1): a referenced outside-workspace source is granted.
+      expect.objectContaining({
+        source: outsideSource,
+        status: 'ready',
+        outsideFileGrant: expect.any(String),
+        expiresAt: expect.any(Number),
+      }),
       { source: unreferencedSource, status: 'error' }, // not in markdownImageSources
     ]);
   });
@@ -472,5 +464,119 @@ describe('session media assets (Task 7)', () => {
 
     expect(GRANT_ROUTE_MEDIA_SIZE_CAPS).toEqual(MARKDOWN_MEDIA_MAX_BYTES);
     expect([...GRANT_ROUTE_MEDIA_MIME_TYPES].sort()).toEqual([...SUPPORTED_MEDIA_MIME_TYPES].sort());
+  });
+});
+
+describe('markdown media any-path (always-relaxed, ADR-1)', () => {
+  const asFileSource = (pathName) => new URL(`file://${pathName}`).toString();
+
+  const writeOutsideSource = async (fixture, filename, bytes) => {
+    const target = path.join(fixture.root, filename);
+    await fs.writeFile(target, bytes);
+    return { target, source: asFileSource(target) };
+  };
+
+  const referenceInMessage = (fixture, source) => {
+    fixture.fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      info: { id: 'msg_1', role: 'assistant' },
+      parts: [{ type: 'text', text: `![media](${source})` }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+  };
+
+  it('grants ready for an absolute source outside the workspace (always-relaxed, no env flag)', async () => {
+    const fixture = await createFixture({ markdown: 'no default source' });
+    const { target, source } = await writeOutsideSource(fixture, 'outside.png', PNG);
+    referenceInMessage(fixture, source);
+
+    const response = await prepare(fixture.app, fixture.directory, [source]);
+
+    expect(response.body.results).toEqual([{
+      source,
+      status: 'ready',
+      path: await fs.realpath(target),
+      outsideFileGrant: expect.any(String),
+      expiresAt: expect.any(Number),
+    }]);
+  });
+
+  it('rejects an oversized file (valid signature, size > per-kind cap) even when always-relaxed', async () => {
+    const fixture = await createFixture({ markdown: 'no default source' });
+    const PNG_HEADER = Buffer.concat([Buffer.from([0x89]), Buffer.from('PNG\r\n\x1a\n'), Buffer.alloc(4)]);
+    const oversized = Buffer.alloc(10 * MIB + 1);
+    PNG_HEADER.copy(oversized, 0);
+    const { source } = await writeOutsideSource(fixture, 'too-big.png', oversized);
+    referenceInMessage(fixture, source);
+
+    const response = await prepare(fixture.app, fixture.directory, [source]);
+
+    expect(response.body.results).toEqual([{ source, status: 'error' }]);
+  });
+
+  it('rejects a bad container signature (PNG bytes labeled .mp4) even when always-relaxed', async () => {
+    const fixture = await createFixture({ markdown: 'no default source' });
+    const { source } = await writeOutsideSource(fixture, 'fake.mp4', PNG);
+    referenceInMessage(fixture, source);
+
+    const response = await prepare(fixture.app, fixture.directory, [source]);
+
+    expect(response.body.results).toEqual([{ source, status: 'error' }]);
+  });
+
+  it('resolves a workspace symlink pointing outside via realpath and stays ready (always-relaxed)', async () => {
+    const fixture = await createFixture({
+      sources: ['linked.png'],
+      markdown: 'no default source',
+    });
+    const { target } = await writeOutsideSource(fixture, 'outside.png', PNG);
+    const linkPath = path.join(fixture.directory, 'linked.png');
+    await fs.symlink(target, linkPath);
+    const source = asFileSource(linkPath);
+    referenceInMessage(fixture, source);
+
+    const response = await prepare(fixture.app, fixture.directory, [source]);
+
+    expect(response.body.results).toEqual([{
+      source,
+      status: 'ready',
+      path: path.resolve(linkPath),
+    }]);
+  });
+
+  it('returns error for a symlink loop (ELOOP) even when always-relaxed', async () => {
+    const fixture = await createFixture({
+      sources: ['a.png'],
+      markdown: 'no default source',
+    });
+    const linkA = path.join(fixture.directory, 'a.png');
+    const linkB = path.join(fixture.directory, 'b.png');
+    await fs.symlink('b.png', linkA);
+    await fs.symlink('a.png', linkB);
+    const source = asFileSource(linkA);
+    referenceInMessage(fixture, source);
+
+    const response = await prepare(fixture.app, fixture.directory, [source]);
+
+    expect(response.body.results).toEqual([{ source, status: 'error' }]);
+  });
+
+  it('rejects a file:// URL with a non-localhost host (always-relaxed)', async () => {
+    const foreign = 'file://remotehost/etc/passwd.png';
+    const fixture = await createFixture({
+      sources: [foreign],
+      markdown: `![media](${foreign})`,
+    });
+
+    const response = await prepare(fixture.app, fixture.directory, [foreign]);
+
+    expect(response.body.results).toEqual([{ source: foreign, status: 'error' }]);
+  });
+
+  it('refuses an unreferenced source (not in markdownImageSources) even when always-relaxed', async () => {
+    const fixture = await createFixture({ markdown: 'no default source' });
+    const { source } = await writeOutsideSource(fixture, 'outside.png', PNG);
+
+    const response = await prepare(fixture.app, fixture.directory, [source]);
+
+    expect(response.body.results).toEqual([{ source, status: 'error' }]);
   });
 });

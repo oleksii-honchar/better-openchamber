@@ -566,6 +566,11 @@ export const getFsMimeType = (filePath: string): string => {
   return mimeMap[ext] || 'application/octet-stream';
 };
 
+export const isFsPathInsideWorkspace = (resolvedPath: string, requestedRoot?: string): boolean => {
+  const baseRoot = getFsAccessRoot(requestedRoot);
+  return isPathInside(resolvedPath, path.resolve(baseRoot));
+};
+
 export type FsReadPathResolution =
   | { ok: true; resolvedPath: string }
   | { ok: false; status: number; error: string };
