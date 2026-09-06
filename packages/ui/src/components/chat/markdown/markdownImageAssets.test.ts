@@ -24,7 +24,7 @@ const runtimeFetch = mock(async (path: string, init?: RequestInit & { query?: Re
       headers: { 'content-type': 'application/json' },
     });
   }
-  if (path === '/api/fs/raw') {
+  if (path.startsWith('/api/fs/raw')) {
     const headers: Record<string, string> = { 'content-type': rawContentType };
     if (rawContentLength !== undefined) headers['content-length'] = String(rawContentLength);
     return new Response(rawBody, { status: 200, headers });
@@ -32,7 +32,18 @@ const runtimeFetch = mock(async (path: string, init?: RequestInit & { query?: Re
   requestCount += 1;
   const body = JSON.parse(String(init?.body)) as { sources: string[] };
   return new Response(JSON.stringify({
-    results: body.sources.map((source) => ({ source, status: 'ready', path: `/repo/${source}` })),
+    results: body.sources.map((source) => {
+      if (source.startsWith('/')) {
+        return {
+          source,
+          status: 'ready',
+          path: source,
+          outsideFileGrant: 'grant-1',
+          expiresAt: 1_000_000,
+        };
+      }
+      return { source, status: 'ready', path: `/repo/${source}` };
+    }),
   }), { status: 200, headers: { 'content-type': 'application/json' } });
 });
 const resolver = {
@@ -68,9 +79,11 @@ globalThis.FileReader = TestFileReader as unknown as typeof FileReader;
 const {
   getPreparedMarkdownImageUrl,
   prepareLocalMarkdownImages,
+  resolvePreparedMarkdownImageSource,
   resolveWorkspaceMarkdownImageSource,
   resolveMarkdownImageSource,
 } = await import('./markdownImageAssets');
+type PreparedMarkdownImage = import('./markdownImageAssets').PreparedMarkdownImage;
 
 const verifyRejects = async (promise: Promise<unknown>, expectedMessage?: string): Promise<void> => {
   const error: unknown = await promise.then(
@@ -126,6 +139,44 @@ describe('Markdown image asset preparation', () => {
     expect(url).toContain('outsideFileGrant=grant-1');
   });
 
+  test('resolves a prepared local asset through runtimeFetch into a data URL', async () => {
+    // Prepared outside-workspace asset (the case that previously failed in the
+    // VS Code webview because a raw http asset URL bypasses window.fetch).
+    const prepared = {
+      status: 'ready' as const,
+      path: '/Volumes/Data/www/beaver/avatar_flux2_klein_00002_.png',
+      outsideFileGrant: 'grant-1',
+      expiresAt: 1_000_000,
+    };
+    const url = await resolvePreparedMarkdownImageSource(
+      prepared,
+      '/repo',
+      new AbortController().signal,
+    );
+
+// The raw fetch must have gone through the runtime fetch layer (bridge).
+    expect(requestPaths).toContain('/api/fs/raw?path=%2FVolumes%2FData%2Fwww%2Fbeaver%2Favatar_flux2_klein_00002_.png&directory=%2Frepo&allowOutsideWorkspace=true&outsideFileGrant=grant-1');
+    expect(url.startsWith('data:image/png;base64,')).toBe(true);
+  });
+
+  test('rejects a prepared asset whose served bytes are not a valid image', async () => {
+    const original = rawBody;
+    rawBody = new Uint8Array(Buffer.from('not an image'));
+    rawContentType = 'image/png';
+    try {
+      await verifyRejects(
+        resolvePreparedMarkdownImageSource({
+          status: 'ready',
+          path: '/repo/bad.png',
+          outsideFileGrant: 'grant-1',
+        }, '/repo', new AbortController().signal),
+        'Unsupported image data',
+      );
+    } finally {
+      rawBody = original;
+    }
+  });
+
   test('loads a workspace image through the local filesystem bridge', async () => {
     requestPaths = [];
 
@@ -137,6 +188,48 @@ describe('Markdown image asset preparation', () => {
 
     expect(url.startsWith('data:image/png;base64,')).toBe(true);
     expect(requestPaths).toEqual(['/api/fs/stat', '/api/fs/raw']);
+  });
+
+  test('prepares an outside-workspace absolute source through the grants route with a grant', async () => {
+    const source = '/Users/oleksii/Downloads/screenshot.png';
+    requestPaths = [];
+
+    const result = await prepareLocalMarkdownImages({
+      sources: [source],
+      directory: '/repo',
+      sessionId: 'ses_grant',
+      messageId: 'msg_grant',
+      signal: new AbortController().signal,
+    });
+
+    const prepared = result.get(source) as Extract<PreparedMarkdownImage, { status: 'ready' }>;
+    expect(prepared).toEqual({
+      status: 'ready',
+      path: source,
+      outsideFileGrant: 'grant-1',
+      expiresAt: 1_000_000,
+    });
+
+    expect(requestPaths).toEqual([
+      '/api/openchamber/sessions/ses_grant/markdown-image-grants',
+    ]);
+
+    const url = getPreparedMarkdownImageUrl(prepared, '/repo');
+    expect(url).toContain('/api/fs/raw?');
+    expect(url).toContain('path=%2FUsers%2Foleksii%2FDownloads%2Fscreenshot.png');
+    expect(url).toContain('allowOutsideWorkspace=true');
+    expect(url).toContain('outsideFileGrant=grant-1');
+  });
+
+  test('workspace-only resolver rejects an outside-workspace absolute path (gallery must use the grants flow)', async () => {
+    await verifyRejects(
+      resolveWorkspaceMarkdownImageSource(
+        '/Users/oleksii/Downloads/screenshot.png',
+        '/repo',
+        new AbortController().signal,
+      ),
+      'Image path is outside the active workspace',
+    );
   });
 });
 

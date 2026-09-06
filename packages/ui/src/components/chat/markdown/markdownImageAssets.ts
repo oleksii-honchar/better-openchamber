@@ -326,4 +326,35 @@ export const getPreparedMarkdownImageUrl = (
     allowOutsideWorkspace: image.outsideFileGrant ? 'true' : undefined,
     outsideFileGrant: image.outsideFileGrant,
   },
-  );
+);
+
+/**
+  * Resolve a prepared local markdown media asset into a browser-loadable source.
+  *
+  * The prepared asset is served through `runtimeFetch` (which in the VS Code
+  extension routes through the local-fs bridge; in the web runtime through the
+  * web server raw route). A raw http asset URL cannot be loaded by an `<img>`
+  * in the VS Code webview — the native image loader bypasses `window.fetch`,
+  * so a direct URL to `/api/fs/raw` would hit the OpenCode server (which has
+  * no such route) and fail. Fetching through `runtimeFetch` and materializing
+  * a data: URL keeps every runtime identical and the browser image loader safe.
+
+  * Validation mirrors `resolveWorkspaceMarkdownImageSource`: signature + cap
+  * checks with the same constants (the grants route already validated authority
+  * and file presence; this validates the served bytes themselves).
+  */
+export const resolvePreparedMarkdownImageSource = async (
+  image: Extract<PreparedMarkdownImage, { status: 'ready' }>,
+  directory: string,
+  signal: AbortSignal,
+): Promise<string> => {
+  throwIfAborted(signal);
+  const preparedUrl = getPreparedMarkdownImageUrl(image, directory);
+  const response = await runtimeFetch(preparedUrl, { signal });
+  if (!response.ok) throw new Error(`Unable to load image (${response.status})`);
+  const mimeType = (response.headers.get('content-type') ?? '').split(';', 1)[0]?.toLowerCase() ?? '';
+  const blob = await response.blob();
+  await validateMediaBlob(blob, mimeType);
+  throwIfAborted(signal);
+  return blobToDataUrl(blob);
+};

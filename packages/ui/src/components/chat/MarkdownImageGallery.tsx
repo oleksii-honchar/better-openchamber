@@ -8,7 +8,6 @@ import {
   subscribeRuntimeUrlAuthToken,
 } from '@/lib/runtime-auth';
 import { getRuntimeApiBaseUrl } from '@/lib/runtime-switch';
-import { isVSCodeRuntime } from '@/lib/desktop';
 import { MarkdownMediaThumbnailBody } from './markdownImageGalleryMedia';
 import type { ToolPopupContent } from './message/types';
 import {
@@ -21,7 +20,7 @@ import {
   isLocalMarkdownImageSource,
   prepareLocalMarkdownImages,
   resolveMarkdownImageSource,
-  resolveWorkspaceMarkdownImageSource,
+  resolvePreparedMarkdownImageSource,
   type PreparedMarkdownImage,
 } from './markdown/markdownImageAssets';
 
@@ -68,7 +67,6 @@ const MarkdownImageThumbnail: React.FC<{
   directory: string;
   assetAuthReady: boolean;
   assetAuthNonce: number;
-  useWorkspaceFsBridge: boolean;
   onShowPopup?: (content: ToolPopupContent) => void;
 }> = ({
   candidate,
@@ -76,7 +74,6 @@ const MarkdownImageThumbnail: React.FC<{
   directory,
   assetAuthReady,
   assetAuthNonce,
-  useWorkspaceFsBridge,
   onShowPopup,
 }) => {
   const { t } = useI18n();
@@ -105,28 +102,36 @@ const MarkdownImageThumbnail: React.FC<{
     return () => observer.disconnect();
   }, [shouldLoad]);
 
-  React.useEffect(() => {
-    if (!shouldLoad || (local && !useWorkspaceFsBridge && !preparation)) return;
-    if (local && useWorkspaceFsBridge) {
-      const controller = new AbortController();
-      setImage({ url: '', status: 'loading' });
-      void resolveWorkspaceMarkdownImageSource(candidate.source, directory, controller.signal).then((url) => {
-        if (controller.signal.aborted) return;
-        setImage({ url, status: 'loading' });
-      }).catch(() => {
-        if (controller.signal.aborted) return;
-        setImage({ url: '', status: 'error' });
-      });
-      return () => controller.abort();
-    }
+React.useEffect(() => {
+    // Local candidates always go through the grants-preparation flow
+    // (`prepareLocalMarkdownImages`), in every runtime including VS Code, so
+    // outside-workspace absolute paths receive a path-bound grant and render
+    // instead of failing silently.
+    //
+    // The prepared asset is fetched through `runtimeFetch` (the VS Code
+    // webview's native `<img>` cannot load a raw http asset URL — it bypasses
+    // `window.fetch`, so a direct `/api/fs/raw` URL would hit the OpenCode server,
+    // which has no such route). `resolvePreparedMarkdownImageSource` materializes
+    // a data: URL through the bridge for every runtime.
+    if (!shouldLoad || (local && !preparation)) return;
     if (local) {
       if (preparation?.status !== 'ready') {
         setImage({ url: '', status: 'error' });
         return;
       }
       if (!assetAuthReady) return;
-      setImage({ url: getPreparedMarkdownImageUrl(preparation, directory), status: 'loading' });
-      return;
+      const controller = new AbortController();
+      setImage({ url: '', status: 'loading' });
+      void resolvePreparedMarkdownImageSource(preparation, directory, controller.signal)
+        .then((url) => {
+          if (controller.signal.aborted) return;
+          setImage({ url, status: 'loading' });
+        })
+        .catch(() => {
+          if (controller.signal.aborted) return;
+          setImage({ url: '', status: 'error' });
+        });
+      return () => controller.abort();
     }
     const controller = new AbortController();
     setImage({ url: '', status: 'loading' });
@@ -138,7 +143,7 @@ const MarkdownImageThumbnail: React.FC<{
       setImage({ url: '', status: 'error' });
     });
     return () => controller.abort();
-  }, [assetAuthNonce, assetAuthReady, candidate.source, directory, local, preparation, shouldLoad, useWorkspaceFsBridge]);
+  }, [assetAuthNonce, assetAuthReady, candidate.source, directory, local, preparation, shouldLoad]);
 
   const openPreview = React.useCallback(() => {
     if (image.status === 'error') {
@@ -213,18 +218,15 @@ export const MarkdownImageGallery: React.FC<{
   const [shouldPrepare, setShouldPrepare] = React.useState(false);
   const [prepared, setPrepared] = React.useState<Map<string, PreparedMarkdownImage> | null>(null);
   const [prepareEpoch, setPrepareEpoch] = React.useState(0);
-  const useWorkspaceFsBridge = isVSCodeRuntime();
   const candidates = React.useMemo(
     () => extractMarkdownImageCandidates(contents, MAX_MARKDOWN_IMAGE_COUNT),
     [contents],
   );
   const serverPreparationSources = React.useMemo(
-    () => useWorkspaceFsBridge
-      ? []
-      : candidates
-        .filter((candidate) => isLocalMarkdownImageSource(candidate.source))
-        .map((candidate) => candidate.source),
-    [candidates, useWorkspaceFsBridge],
+    () => candidates
+      .filter((candidate) => isLocalMarkdownImageSource(candidate.source))
+      .map((candidate) => candidate.source),
+    [candidates],
   );
   React.useEffect(() => {
     if (serverPreparationSources.length === 0 || shouldPrepare) return;
@@ -290,7 +292,6 @@ export const MarkdownImageGallery: React.FC<{
           directory={directory}
           assetAuthReady={assetAuth.ready}
           assetAuthNonce={assetAuth.nonce}
-          useWorkspaceFsBridge={useWorkspaceFsBridge}
           onShowPopup={onShowPopup}
         />
       ))}

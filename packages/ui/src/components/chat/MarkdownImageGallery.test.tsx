@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import type { MarkdownImageCandidate } from './markdown/markdownCore';
@@ -96,5 +98,46 @@ describe('MarkdownImageGallery media-kind branch', () => {
     expect(markup).not.toContain('<audio');
     expect(markup).not.toContain('<img');
     expect(markup).toContain('Media is unavailable');
+  });
+
+  test('VS Code gallery routes local candidates through the grants flow, not the workspace-only resolver', () => {
+    // RED (ad-hoc Task 6): the VS Code branch must not call
+    // `resolveWorkspaceMarkdownImageSource` for local candidates - it must use
+    // `prepareLocalMarkdownImages` + `getPreparedMarkdownImageUrl` so outside-
+    // workspace absolute paths receive a grant and render instead of failing
+    // silently with "preview not available".
+    //
+    // The full gallery render path pulls markdownCore -> markdown-worker -> a
+    // Vite `?worker&url` asset that unit runners cannot load, so the contract
+    // is asserted as an import/source audit plus a behavior probe:
+    //   1. MarkdownImageGallery must not import the workspace-only resolver.
+    //   2. A grants-route result with `outsideFileGrant` must yield a URL with
+    //      `allowOutsideWorkspace=true` (observed behavior, same as the asset
+    //      tests above).
+    // The drive-to-green equivalence completes in GREEN, where the gallery's
+    // VS Code branch stops calling `resolveWorkspaceMarkdownImageSource`.
+    const gallerySource = readFileSync(
+      join(__dirname, 'MarkdownImageGallery.tsx'),
+      'utf8',
+    );
+
+    expect(gallerySource.includes('resolveWorkspaceMarkdownImageSource')).toBe(false);
+  });
+
+  test('VS Code gallery loads prepared local assets via runtimeFetch (data URL), never a raw http asset URL', () => {
+    // RED (Task 6 follow-up): in the VS Code webview a native `<img>` cannot
+    // load a raw `/api/fs/raw` http URL — the image loader bypasses
+    // `window.fetch`, so the request would hit the OpenCode server (no such
+    // route) and fail silently with "preview not available". The gallery must
+    // resolve prepared assets through `resolvePreparedMarkdownImageSource`
+    // (which fetches via the bridge and materializes a data URL), not set the
+    // raw `getPreparedMarkdownImageUrl` as `<img src>`.
+    const gallerySource = readFileSync(
+      join(__dirname, 'MarkdownImageGallery.tsx'),
+      'utf8',
+    );
+
+    expect(gallerySource.includes('getPreparedMarkdownImageUrl(preparation, directory)')).toBe(false);
+    expect(gallerySource.includes('resolvePreparedMarkdownImageSource')).toBe(true);
   });
 });
