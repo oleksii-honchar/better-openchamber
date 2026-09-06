@@ -57,6 +57,24 @@ const readInjectedApiBaseUrl = (): string => {
   return typeof injected === 'string' ? injected.trim() : '';
 };
 
+/**
+ * The API base the url-token mint would resolve against. In the VS Code
+ * extension webview there is no network-addressable API base (the bridge is
+ * the only transport) and no relay tunnel, so resolving `/auth/url-token`
+ * would hit the `vscode-webview://` origin and fail with a 403 — forever,
+ * because the token never lands and the refresh scheduler would retry with a
+ * 0 ms delay. A relay tunnel is a resolvable context too: the mint then rides
+ * the tunnel instead of the network.
+ */
+const resolveRuntimeAuthBase = (apiBaseUrl?: string | null): string => {
+  if (typeof apiBaseUrl === 'string' && apiBaseUrl.trim()) return apiBaseUrl.trim();
+  return readInjectedApiBaseUrl();
+};
+
+const hasResolvableRuntimeAuthBase = (apiBaseUrl?: string | null): boolean => {
+  return Boolean(resolveRuntimeAuthBase(apiBaseUrl)) || Boolean(getActiveRelayTunnel());
+};
+
 const buildAuthUrl = (apiBaseUrl: string | null | undefined, path: string): string => {
   const base = typeof apiBaseUrl === 'string' && apiBaseUrl.trim()
     ? apiBaseUrl.trim()
@@ -220,6 +238,9 @@ const getRuntimeAuthCredential = async (): Promise<RuntimeAuthCredential> => {
 const mintRuntimeUrlAuthToken = (apiBaseUrl?: string | null): Promise<string> => {
   if (runtimeUrlAuthRefreshPromise) return runtimeUrlAuthRefreshPromise;
   const generation = runtimeAuthGeneration;
+  if (!hasResolvableRuntimeAuthBase(apiBaseUrl)) {
+    return Promise.reject(new Error('No resolvable runtime URL auth base URL (bridge-only webview)'));
+  }
 
   const refreshPromise = (async () => {
     const credential = await getRuntimeAuthCredential();
@@ -314,10 +335,14 @@ const mintLocalRuntimeUrlAuthToken = (localOrigin: string): Promise<string> => {
 };
 
 // Returns a valid token without a network call, minting only when the current
-// token is missing or already inside the skew window.
+// token is missing or already inside the skew window. When no API base is
+// resolvable (bridge-only webview) there is nothing to mint against — resolve
+// with '' so consumers (which only need the token for network assets) proceed
+// without an HTTP call or a retry loop.
 export const refreshRuntimeUrlAuthToken = async (apiBaseUrl?: string | null): Promise<string> => {
   const existing = readValidRuntimeUrlAuthTokenSync();
   if (existing) return existing;
+  if (!hasResolvableRuntimeAuthBase(apiBaseUrl)) return '';
   return mintRuntimeUrlAuthToken(apiBaseUrl);
 };
 
@@ -367,6 +392,10 @@ const clearUrlAuthRefreshTimer = (): void => {
 const scheduleUrlAuthRefresh = (): void => {
   clearUrlAuthRefreshTimer();
   if (urlAuthConsumerCount <= 0 || typeof window === 'undefined') return;
+  // No resolvable base (bridge-only webview): the mint would 403 against the
+  // webview origin and never succeed, so the refresh schedule must not run at
+  // all — otherwise it repeats with a 0 ms delay forever.
+  if (!hasResolvableRuntimeAuthBase(urlAuthApiBaseUrl)) return;
 
   // Refresh before the skew window so the old token is still valid when the new
   // one swaps in. With no token yet (expiry 0), refresh immediately.

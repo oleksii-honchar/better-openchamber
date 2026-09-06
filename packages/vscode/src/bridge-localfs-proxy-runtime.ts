@@ -8,6 +8,7 @@ import {
   resolveFileReadPath,
   type FsReadPathResolution,
 } from './bridge-fs-helpers-runtime';
+import { normalizeMarkdownImageGrantsPath } from './bridge-localfs-proxy-path';
 
 // ---------------------------------------------------------------------------
 // Any-path media (ADR-1): always on, no env flag
@@ -302,8 +303,9 @@ export const tryHandleLocalFsProxy = async (method: string, requestPath: string,
     return buildProxyJsonError(400, 'Invalid request path');
   }
 
-  if (/^\/api\/openchamber\/sessions\/[^/]+\/markdown-image-grants$/.test(parsed.pathname)) {
-    return handleMarkdownImageGrantsProxy(method, requestPath, options);
+  const grantsPath = normalizeMarkdownImageGrantsPath(parsed.pathname);
+  if (grantsPath) {
+    return handleMarkdownImageGrantsProxy(method, grantsPath, options);
   }
 
   const fsProxyPath = normalizeFsProxyPath(parsed.pathname);

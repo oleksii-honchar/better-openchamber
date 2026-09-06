@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  acquireRuntimeUrlAuthToken,
   buildRuntimeAuthHeaders,
   clearRuntimeAuthCredentialProvider,
   clearRuntimeUrlAuthToken,
@@ -170,6 +171,84 @@ describe('runtime auth headers', () => {
     } finally {
       globalThis.fetch = previousFetch;
       clearRuntimeUrlAuthToken();
+    }
+  });
+
+  // VS Code extension webview regression: no injected API base and no relay
+  // tunnel => minting /auth/url-token would resolve against the
+  // vscode-webview:// origin, 403 forever, and hot-loop the proactive refresh
+  // scheduler. Minting must be a no-op in that context (see #vscode-webview).
+  test('does not mint when no API base URL is resolvable (bridge-only webview)', async () => {
+    const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+    const previousFetch = globalThis.fetch;
+    let fetchCount = 0;
+    try {
+      clearRuntimeUrlAuthToken();
+      clearRuntimeAuthCredentialProvider();
+      if (previousWindow) {
+        Object.defineProperty(globalThis, 'window', previousWindow);
+      } else {
+        Reflect.deleteProperty(globalThis, 'window');
+      }
+      (globalThis as { window?: unknown }).window = {} as Window;
+      globalThis.fetch = (async () => {
+        fetchCount += 1;
+        return new Response(JSON.stringify({ token: 'url-token', expiresAt: Date.now() + 60_000 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof fetch;
+
+      // Callers awaiting the token (e.g. useAssetAuth) should resolve — with an
+      // empty token meaning "no token needed" — instead of throwing/hot-looping.
+      const token = await refreshRuntimeUrlAuthToken();
+
+      expect(token).toBe('');
+      expect(fetchCount).toBe(0);
+    } finally {
+      globalThis.fetch = previousFetch;
+      clearRuntimeUrlAuthToken();
+      clearRuntimeAuthCredentialProvider();
+      if (previousWindow) {
+        Object.defineProperty(globalThis, 'window', previousWindow);
+      } else {
+        Reflect.deleteProperty(globalThis, 'window');
+      }
+    }
+  });
+
+  test('does not proactively schedule url-token refresh without a resolvable base', async () => {
+    const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+    const previousFetch = globalThis.fetch;
+    let fetchCount = 0;
+    try {
+      clearRuntimeUrlAuthToken();
+      clearRuntimeAuthCredentialProvider();
+      (globalThis as { window?: unknown }).window = {} as Window;
+      globalThis.fetch = (async () => {
+        fetchCount += 1;
+        return new Response(JSON.stringify({ token: 'url-token', expiresAt: Date.now() + 60_000 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof fetch;
+
+      // Consumer active, but no base to mint against: the refresh scheduler
+      // must not run at all (previously it looped with a 0 ms delay forever).
+      const release = acquireRuntimeUrlAuthToken();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      release();
+
+      expect(fetchCount).toBe(0);
+    } finally {
+      globalThis.fetch = previousFetch;
+      clearRuntimeUrlAuthToken();
+      clearRuntimeAuthCredentialProvider();
+      if (previousWindow) {
+        Object.defineProperty(globalThis, 'window', previousWindow);
+      } else {
+        Reflect.deleteProperty(globalThis, 'window');
+      }
     }
   });
 
