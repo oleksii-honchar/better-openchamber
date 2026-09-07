@@ -421,8 +421,9 @@ const useFileReferenceInteractions = ({
 
         linkedCount += 1;
 
-        const canGrantOutsideFile = isDesktopShell()
-          && isDesktopLocalOriginActive()
+        const canGrantOutsideFile =
+          ((isDesktopShell() && isDesktopLocalOriginActive()) ||
+            (isVSCodeRuntime() && editor))
           && !isFilePathWithinDirectory(resolved.resolvedPath, effectiveDirectory);
         const existsPromise = canGrantOutsideFile
           ? Promise.resolve(true)

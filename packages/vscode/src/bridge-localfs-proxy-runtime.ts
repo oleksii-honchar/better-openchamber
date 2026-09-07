@@ -365,9 +365,13 @@ export const tryHandleLocalFsProxy = async (method: string, requestPath: string,
     return buildProxyJsonError(grantResolution.status, grantResolution.error);
   }
 
+  const directoryHint =
+    options?.headers?.['x-opencode-directory'] ??
+    (parsed.searchParams.get('directory') || undefined);
+
   const resolution: FsReadPathResolution = await resolveFileReadPath(
     targetPath,
-    parsed.searchParams.get('directory') || undefined,
+    directoryHint,
   );
   if (!resolution.ok) {
     if (fsProxyPath === '/api/fs/stat' && optional && resolution.status === 404) {

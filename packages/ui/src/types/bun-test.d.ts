@@ -13,6 +13,8 @@ declare module "bun:test" {
     toThrow(expected?: string | RegExp | (new (...args: never[]) => unknown)): void;
     toContain(expected: unknown): void;
     toBeDefined(): void;
+    toHaveBeenCalled(): void;
+    toHaveBeenCalledWith(...expectedArgs: unknown[]): void;
     rejects: {
       toThrow(expected?: string | RegExp | (new (...args: never[]) => unknown)): Promise<void>;
     };
@@ -27,12 +29,25 @@ declare module "bun:test" {
       toBe(expected: unknown): void;
       toContain(expected: unknown): void;
       toBeNull(): void;
+      toHaveBeenCalled(): void;
+      toHaveBeenCalledWith(...expectedArgs: unknown[]): void;
     };
   };
   export function beforeEach(fn: () => void | Promise<void>): void;
   export function afterEach(fn: () => void | Promise<void>): void;
   export function afterAll(fn: () => void | Promise<void>): void;
-  export function mock<T extends (...args: never[]) => unknown>(fn?: T): T;
+
+  export interface Mock<T extends (...args: never[]) => unknown> {
+    (...args: Parameters<T>): ReturnType<T>;
+    mockClear(): void;
+    mockReset(): void;
+    mockImplementation(fn: T): void;
+    mock: {
+      calls: unknown[][];
+    };
+  }
+
+  export function mock<T extends (...args: never[]) => unknown>(fn?: T): Mock<T> & T;
   export namespace mock {
     function module(moduleName: string, factory: () => Record<string, unknown>): void;
   }

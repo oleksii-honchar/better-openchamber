@@ -152,6 +152,42 @@ describe('bridge local fs proxy', () => {
     expect(Buffer.from(response?.bodyBase64 ?? '', 'base64').toString()).toBe('test');
   });
 
+  // --- Task T0 (Fix 1): directory hint arrives as the x-opencode-directory header ---
+
+  it('resolves a stat probe via the x-opencode-directory header (no query param)', async () => {
+    existingFiles.add('/workspace-two/stat.md');
+    const response = await tryHandleLocalFsProxy(
+      'GET',
+      '/api/fs/stat?path=%2Fworkspace-two%2Fstat.md&optional=true',
+      { headers: { 'x-opencode-directory': '/workspace-two' } },
+    );
+
+    expect(response?.status).toBe(200);
+    expect(JSON.parse(Buffer.from(response?.bodyBase64 ?? '', 'base64').toString('utf8'))).toEqual({
+      path: '/workspace-two/stat.md',
+      isFile: true,
+      size: 4,
+      mtimeMs: 1,
+    });
+  });
+
+  it('prefers the x-opencode-directory header over the directory query param', async () => {
+    existingFiles.add('/workspace-two/precedence.md');
+    const response = await tryHandleLocalFsProxy(
+      'GET',
+      '/api/fs/stat?path=%2Fworkspace-two%2Fprecedence.md&directory=%2Fworkspace&optional=true',
+      { headers: { 'x-opencode-directory': '/workspace-two' } },
+    );
+
+    expect(response?.status).toBe(200);
+    expect(JSON.parse(Buffer.from(response?.bodyBase64 ?? '', 'base64').toString('utf8'))).toEqual({
+      path: '/workspace-two/precedence.md',
+      isFile: true,
+      size: 4,
+      mtimeMs: 1,
+    });
+  });
+
   // --- Task 8: grants route ---
 
   it('forwards the grants request to the server for authority and mints a temp-dir grant for temp sources', async () => {
