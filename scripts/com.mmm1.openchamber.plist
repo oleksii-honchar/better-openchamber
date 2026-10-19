@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.mmm1.openchamber</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/tuiteraz/better-openchamber/scripts/server.sh</string>
+		<string>--run</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<!-- launchd never sources zsh rc files: the nvm node dir for v24.22.0 is
+		     pinned explicitly (resolved on mmm1 via zsh -lc 'command -v node'),
+		     plus the mmm1 universal system PATH convention. -->
+		<key>PATH</key>
+		<string>/Users/tuiteraz/.nvm/versions/node/v24.22.0/bin:/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin:/opt/homebrew/bin</string>
+	</dict>
+	<key>StandardOutPath</key>
+	<string>/Users/tuiteraz/Library/Logs/OpenChamber/service.out.log</string>
+	<key>StandardErrorPath</key>
+	<string>/Users/tuiteraz/Library/Logs/OpenChamber/service.err.log</string>
+</dict>
+</plist>
