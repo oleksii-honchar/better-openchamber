@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
-# OpenChamber service dispatcher for mmm1 (launchd label: com.mmm1.openchamber)
+# OpenChamber service dispatcher — mmm1 (launchd label: com.mmm1.openchamber)
+#                        and sa54/Termux (no launcher: self-detached + boot hook).
 # Usage: scripts/server.sh --run | --start | --stop | --status
 #
 # --run    Foreground runtime. This is the launchd entry AND the manual-smoke entry.
 # --start  Idempotently install the LaunchAgent, kickstart it, wait for readiness.
-# --stop   Bootout the LaunchAgent (idempotent).
-# --status Report launchd state + one reachability probe. Never prints secrets.
+#          Termux: guard-checked detached spawn of --run + readiness wait.
+# --stop   Bootout the LaunchAgent / stop the detached processes. Idempotent,
+#          and WAITS for the graceful close to finish (a lingering server during
+#          shutdown makes any not-yet-stopped check falsely "already running").
+# --status Report service state + one reachability probe. Never prints secrets.
 #
 # Configuration: ~/.config/openchamber/server.env (0600, operator-created) supplies
 # OPENCHAMBER_UI_PASSWORD / OPENCHAMBER_OPENCODE_PATH / OPENCHAMBER_SERVE_PORT
@@ -13,11 +17,18 @@
 
 set -euo pipefail
 
+IS_LAUNCHD=0
+command -v launchctl >/dev/null 2>&1 && IS_LAUNCHD=1
+
 LABEL="com.mmm1.openchamber"
 LEGACY_LABEL="dev.openchamber.web"
 DEFAULT_PORT=3011
 ENV_FILE="$HOME/.config/openchamber/server.env"
-LOG_DIR="$HOME/Library/Logs/OpenChamber"
+if [[ "$IS_LAUNCHD" == 1 ]]; then
+  LOG_DIR="$HOME/Library/Logs/OpenChamber"
+else
+  LOG_DIR="$HOME/.local/state/openchamber"   # Termux (sa54): no ~/Library
+fi
 PLIST_SRC="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/com.mmm1.openchamber.plist"
 PLIST_DST="$HOME/Library/LaunchAgents/com.mmm1.openchamber.plist"
 
@@ -60,6 +71,34 @@ probe_port() {
   [[ "$code" != "000" && -n "$code" ]]
 }
 
+# The managed-children patterns. NOTE the bracket-class form: a plain pattern
+# matches the running grep's OWN command line on Termux/Android.
+PROC_PATTERNS=("[c]li.js serve --foreground" "[s]rc/index")
+
+procs_running() {
+  local p
+  for p in "${PROC_PATTERNS[@]}"; do
+    if pgrep -f "$p" >/dev/null 2>&1; then return 0; fi
+  done
+  return 1
+}
+
+procs_kill_and_wait() {
+  # Stop both; WAIT for the graceful close (up to deadline) so a later
+  # already-running guard cannot observe a lingering dying process.
+  local p deadline=$((SECONDS + 40))
+  for p in "${PROC_PATTERNS[@]}"; do pkill -f "$p" 2>/dev/null || true; done
+  while ((SECONDS < deadline)); do
+    procs_running || { echo "stopped (all processes exited)"; return 0; }
+    sleep 1
+  done
+  echo "warn: processes still present after 40 s; sending SIGKILL" >&2
+  for p in "${PROC_PATTERNS[@]}"; do pkill -9 -f "$p" 2>/dev/null || true; done
+  sleep 1
+  procs_running && { echo "error: processes refuse to die" >&2; return 1; }
+  echo "stopped (forced)"
+}
+
 do_run() {
   mkdir -p "$LOG_DIR"
   if [[ ! -d "$REPO_ROOT/packages/web/dist" ]]; then
@@ -71,13 +110,60 @@ do_run() {
   # CLI entry: packages/web/bin/cli.js; serve flags per bin/lib/cli-args.js
   # (--foreground, --host, --port, --ui-password). The port is OUR env layer
   # (OPENCHAMBER_SERVE_PORT, default 3011) — the CLI reads no port env var.
-  exec node "$REPO_ROOT/packages/web/bin/cli.js" serve --foreground \
-    --host 0.0.0.0 \
-    --port "${OPENCHAMBER_SERVE_PORT:-$DEFAULT_PORT}" \
-    --ui-password "$OPENCHAMBER_UI_PASSWORD"
+  if [[ "$IS_LAUNCHD" == 1 ]]; then
+    exec node "$REPO_ROOT/packages/web/bin/cli.js" serve --foreground \
+      --host 0.0.0.0 \
+      --port "${OPENCHAMBER_SERVE_PORT:-$DEFAULT_PORT}" \
+      --ui-password "$OPENCHAMBER_UI_PASSWORD"
+  fi
+  # Termux (sa54): loopback bind (the phone's own Caddy is the public edge),
+  # and the CA bundle for reaching homelab https endpoints (NODE_EXTRA_CA_CERTS
+  # is read by node and by bun's fetch in the managed child).
+  local ca=""
+  [[ -f "$HOME/.termux-certs/puma-ca-bundle.pem" ]] && ca="$HOME/.termux-certs/puma-ca-bundle.pem"
+  exec env ${ca:+NODE_EXTRA_CA_CERTS="$ca"} \
+    node "$REPO_ROOT/packages/web/bin/cli.js" serve --foreground \
+      --host 127.0.0.1 \
+      --port "${OPENCHAMBER_SERVE_PORT:-$DEFAULT_PORT}" \
+      --ui-password "$OPENCHAMBER_UI_PASSWORD" \
+      >> "$LOG_DIR/server.log" 2>&1
+}
+
+do_start_termux() {
+  if procs_running; then
+    echo "already running (port state: $(probe_port && echo up || echo down))"
+    do_status_termux
+    return 0
+  fi
+  mkdir -p "$LOG_DIR"
+  nohup setsid bash -c "exec '$REPO_ROOT/scripts/server.sh' --run" >/dev/null 2>&1 </dev/null &
+  local port deadline=$((SECONDS + 60))
+  port="$(resolved_port)"
+  echo "waiting for http://127.0.0.1:$port/ (<=60 s)..."
+  while ((SECONDS < deadline)); do
+    if probe_port; then echo "openchamber is up on :$port"; return 0; fi
+    sleep 2
+  done
+  echo "error: server did not answer on :$port within 60 s (see $LOG_DIR/server.log)" >&2
+  exit 1
+}
+
+do_status_termux() {
+  local port reachable state
+  port="$(resolved_port)"
+  if procs_running; then state="running"; else state="stopped"; fi
+  if probe_port; then reachable="yes"; else reachable="no"; fi
+  echo "mode=termux-detached"
+  echo "port=$port"
+  echo "state=$state"
+  echo "reachable=$reachable"
 }
 
 do_start() {
+  if [[ "$IS_LAUNCHD" != 1 ]]; then
+    do_start_termux
+    return
+  fi
   # Coexistence guard: the built-in dev.openchamber.web agent must not run
   # alongside ours — exactly one openchamber launchd entry.
   if launchctl list 2>/dev/null | grep -q "$LEGACY_LABEL"; then
@@ -141,12 +227,20 @@ launchd_state() {
 }
 
 do_stop() {
+  if [[ "$IS_LAUNCHD" != 1 ]]; then
+    procs_kill_and_wait
+    return
+  fi
   launchctl bootout "gui/$UID/$LABEL" 2>/dev/null || true
   echo "booted out gui/$UID/$LABEL (idempotent)"
 }
 
 do_status() {
   load_server_env
+  if [[ "$IS_LAUNCHD" != 1 ]]; then
+    do_status_termux
+    return
+  fi
   local port state reachable
   port="$(resolved_port)"
   state="$(launchd_state)"
