@@ -166,5 +166,17 @@ Rendering, focus, keyboard behavior, IME and WKWebView are **not covered by
 tests** and are verified by hand. Do not report a change to them as validated
 on the strength of type-check and unit tests.
 
+One deliberate exception proves a *committed tree*, not behavior: the
+running-elapsed line in the footer's working/stop cluster is pinned with
+mounted renders through a fake DOM with a deterministic tree serializer
+(`runningElapsedFooterHarness.test-utils.tsx`), plus a byte-exact golden of the
+pristine pre-feature footer captured the same way — the proof that the
+`runningElapsedVisible` opt-in defaults OFF and, when ON, adds only the line
+element. Store-backed surfaces must be captured mounted: server-render
+shortcuts only ever see a store's initial state. Regenerating that golden
+legitimately means re-capturing from the pre-change implementation, never from
+the current one. The exception covers that inserted-region and nothing else —
+everything above still stands.
+
 Run tests per file (`bun test <path>`): `mock.module` is process-global, so
 suites that install module mocks are order-dependent.

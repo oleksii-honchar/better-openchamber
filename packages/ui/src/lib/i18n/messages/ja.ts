@@ -2077,6 +2077,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.statusRow.modelStatus': '{model} · {status}',
   'chat.statusRow.summary.activeLeft': '{active}アクティブ · {left}残り',
   'chat.statusRow.aborted': '中止されました',
+  'chat.statusRow.runningFor': '🕐 {duration}',
   'chat.revertIndicator.redo': 'やり直し',
   'chat.revertIndicator.redoAria': 'やり直し — 元に戻したメッセージを復元',
   'chat.revertPopover.title': '元に戻しました',

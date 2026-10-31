@@ -2083,6 +2083,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.statusRow.modelStatus': '{model} · {status}',
   'chat.statusRow.summary.activeLeft': '{active}개 활성 · {left}개 남음',
   'chat.statusRow.aborted': '중단됨',
+  'chat.statusRow.runningFor': '🕐 {duration}',
   'chat.revertIndicator.redo': '다시 실행',
   'chat.revertIndicator.redoAria': '다시 실행 — 되돌린 메시지 복원',
   'chat.revertPopover.title': '되돌림',

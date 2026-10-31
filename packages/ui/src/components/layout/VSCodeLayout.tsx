@@ -540,7 +540,7 @@ export const VSCodeLayout: React.FC = () => {
           />
           <div className="flex-1 overflow-hidden">
             <ErrorBoundary>
-              <ChatView />
+              <ChatView runningElapsedVisible />
             </ErrorBoundary>
           </div>
         </div>
@@ -594,7 +594,7 @@ export const VSCodeLayout: React.FC = () => {
             />
             <div className="flex-1 overflow-hidden">
               <ErrorBoundary>
-                <ChatView active={currentView === 'chat'} />
+                <ChatView active={currentView === 'chat'} runningElapsedVisible />
               </ErrorBoundary>
             </div>
           </div>
@@ -632,7 +632,7 @@ export const VSCodeLayout: React.FC = () => {
             />
             <div className="flex-1 overflow-hidden">
               <ErrorBoundary>
-                <ChatView active={currentView === 'chat'} />
+                <ChatView active={currentView === 'chat'} runningElapsedVisible />
               </ErrorBoundary>
             </div>
           </div>

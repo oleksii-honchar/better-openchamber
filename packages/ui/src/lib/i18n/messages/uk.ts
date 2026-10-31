@@ -2059,6 +2059,7 @@ export const dict: Record<I18nKey, string> = {
   "chat.statusRow.modelStatus": "{model} · {status}",
   "chat.statusRow.summary.activeLeft": "Активних: {active} · залишилось: {left}",
   "chat.statusRow.aborted": "Перервано",
+  "chat.statusRow.runningFor": "🕐 {duration}",
   "chat.revertIndicator.redo": "Повторити",
   "chat.revertIndicator.redoAria": "Повторити — відновити відкочені повідомлення",
   "chat.revertPopover.title": "Відкочено",

@@ -1904,6 +1904,7 @@ export const dict = {
   'chat.statusRow.tasksTitle': 'Aufgaben',
   'chat.statusRow.summary.activeLeft': '{active} aktiv · {left} übrig',
   'chat.statusRow.aborted': 'Abgebrochen',
+  'chat.statusRow.runningFor': '🕐 {duration}',
   'chat.revertIndicator.redo': 'Wiederholen',
   'chat.revertIndicator.redoAria': 'Wiederholen — wiederhergestellte Nachrichten',
   'chat.revertPopover.title': 'Zurückgesetzt',

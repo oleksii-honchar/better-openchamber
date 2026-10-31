@@ -11,7 +11,8 @@ import { getSafeStorage } from '@/stores/utils/safeStorage';
 // index rows actually render their live state from, so a row can never count a
 // turn that index calls idle.
 //
-// Two maps with deliberately different lifetimes:
+// Two maps with deliberately different lifetimes (and one provenance set that
+// only ever mirrors entries of the first):
 //
 // - `startedAt` — sessions observed active right now. Persisted, so reloading
 //   the page resumes the same count instead of restarting it at zero.
@@ -50,10 +51,22 @@ import { getSafeStorage } from '@/stores/utils/safeStorage';
 
 type SessionActivityPhase = 'active' | 'settled';
 
+/** Where the active sessions in a pass were seen. */
+type ActiveSource = 'event' | 'snapshot';
 
 type SessionActivityTimingState = {
   startedAt: ReadonlyMap<string, number>;
   settledMs: ReadonlyMap<string, number>;
+  /**
+   * Entries of `startedAt` whose start was only minted at the moment a
+   * snapshot first said "busy" — a client that joined mid-turn saw the turn
+   * running, never its beginning. The sidebar counts those turns from the
+   * observation; a running-only reader must not present that timestamp as a
+   * turn start, so the read keeps provenance beside the value. Membership
+   * here always coincides with membership in `startedAt`: a record enters when
+   * its start is minted, and leaves with it.
+   */
+  unknownStarts: ReadonlySet<string>;
 };
 
 /** Persisted per session: when this turn began, and when it was last alive. */
@@ -93,6 +106,7 @@ const EMPTY_RESTORED: ReadonlyMap<string, PersistedStart> = new Map();
 export const useSessionActivityTimingStore = create<SessionActivityTimingState>(() => ({
   startedAt: new Map(),
   settledMs: new Map(),
+  unknownStarts: new Set(),
 }));
 
 /** Last moment each live start was observed active, for the liveness stamp. */
@@ -265,20 +279,27 @@ type SettleInput =
 const applyTransitions = (
   activeSessionIds: ReadonlySet<string>,
   settle: SettleInput | null,
+  activeSource: ActiveSource,
 ): void => {
   const now = Date.now();
   const restored = getAdoptableStarts(now);
   const state = useSessionActivityTimingStore.getState();
 
-  const next: { started: Map<string, number> | null; settled: Map<string, number> | null } = {
+  const next: {
+    started: Map<string, number> | null;
+    settled: Map<string, number> | null;
+    unknownStarts: Set<string> | null;
+  } = {
     started: null,
     settled: null,
+    unknownStarts: null,
   };
   let sawActive = false;
   let restoredChanged = false;
 
   const draftStarted = (): Map<string, number> => (next.started ??= new Map(state.startedAt));
   const draftSettled = (): Map<string, number> => (next.settled ??= new Map(state.settledMs));
+  const draftUnknownStarts = (): Set<string> => (next.unknownStarts ??= new Set(state.unknownStarts));
 
   for (const sessionId of activeSessionIds) {
     sawActive = true;
@@ -288,12 +309,27 @@ const applyTransitions = (
     // `session.status: busy` on every step of the agent loop, so a busy event
     // means "still running", not "just started". Both paths therefore prefer a
     // persisted start when one survives; only the bounds below expire it.
-    draftStarted().set(sessionId, restored.get(sessionId)?.start ?? now);
+    const restoredStart = restored.get(sessionId);
+    draftStarted().set(sessionId, restoredStart?.start ?? now);
+    // A running-only reader needs to know whether this client watched the turn
+    // begin. Through an event this is the first active observation this page
+    // has of the session — its transition edge. A snapshot-only first sighting
+    // says no such thing (the turn may have started hours ago), and a
+    // persisted record surviving from a page that did watch it is the same
+    // fact either path adopted it through. That distinction never changes
+    // `startedAt` itself: every existing read keeps counting from observation
+    // as before.
+    if (restoredStart !== undefined || activeSource === 'event') {
+      draftUnknownStarts().delete(sessionId);
+    } else {
+      draftUnknownStarts().add(sessionId);
+    }
     if ((next.settled ?? state.settledMs).has(sessionId)) draftSettled().delete(sessionId);
   }
 
   const settleTurn = (sessionId: string, start: number): void => {
     draftStarted().delete(sessionId);
+    draftUnknownStarts().delete(sessionId);
     liveSeen.delete(sessionId);
     draftSettled().set(sessionId, Math.max(0, now - start));
   };
@@ -327,6 +363,7 @@ const applyTransitions = (
     useSessionActivityTimingStore.setState({
       startedAt: next.started ?? state.startedAt,
       settledMs: next.settled ?? state.settledMs,
+      unknownStarts: next.unknownStarts ?? state.unknownStarts,
     });
   }
 
@@ -356,10 +393,10 @@ export const observeSessionActivityTiming = (
   phase: SessionActivityPhase,
 ): void => {
   if (phase === 'active') {
-    applyTransitions(new Set([sessionId]), null);
+    applyTransitions(new Set([sessionId]), null, 'event');
     return;
   }
-  applyTransitions(EMPTY_ACTIVE, { source: 'event', sessionId });
+  applyTransitions(EMPTY_ACTIVE, { source: 'event', sessionId }, 'event');
 };
 
 /**
@@ -373,7 +410,7 @@ export const reconcileSessionActivityTiming = (
   activeSessionIds: ReadonlySet<string>,
   isCoveredBySnapshot: (sessionId: string) => boolean,
 ): void => {
-  applyTransitions(activeSessionIds, { source: 'snapshot', isCovered: isCoveredBySnapshot });
+  applyTransitions(activeSessionIds, { source: 'snapshot', isCovered: isCoveredBySnapshot }, 'snapshot');
 };
 
 export const removeSessionActivityTiming = (sessionId: string): void => {
@@ -389,10 +426,14 @@ export const removeSessionActivityTiming = (sessionId: string): void => {
   }
 
   let startedAt = state.startedAt;
+  let unknownStarts = state.unknownStarts;
   if (hadStart) {
     const draft = new Map(state.startedAt);
     draft.delete(sessionId);
     startedAt = draft;
+    const unknownDraft = new Set(state.unknownStarts);
+    unknownDraft.delete(sessionId);
+    unknownStarts = unknownDraft;
   }
   let settledMs = state.settledMs;
   if (hadSettled) {
@@ -401,7 +442,7 @@ export const removeSessionActivityTiming = (sessionId: string): void => {
     settledMs = draft;
   }
 
-  useSessionActivityTimingStore.setState({ startedAt, settledMs });
+  useSessionActivityTimingStore.setState({ startedAt, settledMs, unknownStarts });
   if (hadStart || restoredChanged) persistStarts(startedAt, Date.now());
 };
 
@@ -417,7 +458,11 @@ export const resetSessionActivityTiming = (options: { pageLoadAt?: number } = {}
   liveSeen.clear();
   lastPersistAt = 0;
   pageLoadAt = options.pageLoadAt ?? Date.now();
-  useSessionActivityTimingStore.setState({ startedAt: new Map(), settledMs: new Map() });
+  useSessionActivityTimingStore.setState({
+    startedAt: new Map(),
+    settledMs: new Map(),
+    unknownStarts: new Set(),
+  });
 };
 
 // ---------------------------------------------------------------------------
@@ -430,6 +475,35 @@ export const useSessionActivityStartedAt = (sessionId: string): number | undefin
 
 export const useSessionSettledDurationMs = (sessionId: string): number | undefined => (
   useSessionActivityTimingStore(useCallback((state) => state.settledMs.get(sessionId), [sessionId]))
+);
+
+/**
+ * The current turn's start, but only when this client actually watched the
+ * turn begin — through an `active` event, or through the persisted record of
+ * a page that did. Undefined whenever a running-only reader has nothing to
+ * count from: no turn running, or a turn first seen through a status snapshot
+ * (joined mid-turn), whose true start this client cannot know. A running
+ * duration is `now - this`, computed by the leaf's own ticker — the value
+ * never exists after the turn ends, so there is no settled tail. NEVER
+ * substitute a fabricated zero for `undefined`: "unknown" is a real answer
+ * the surface must be able to render.
+ */
+export const useSessionActivityObservedStartAt = (sessionId: string): number | undefined => (
+  useSessionActivityTimingStore(useCallback((state) => (
+    state.unknownStarts.has(sessionId) ? undefined : state.startedAt.get(sessionId)
+  ), [sessionId]))
+);
+
+/**
+ * Whether a running duration exists to render — without subscribing the
+ * caller to the value. Like `useHasSessionActivityDuration` for the running
+ * read: true only while the turn runs AND its start is observed; false the
+ * moment it ends, and always false for a turn joined mid-turn.
+ */
+export const useHasSessionActivityRunningDuration = (sessionId: string): boolean => (
+  useSessionActivityTimingStore(useCallback((state) => (
+    state.startedAt.has(sessionId) && !state.unknownStarts.has(sessionId)
+  ), [sessionId]))
 );
 
 /**

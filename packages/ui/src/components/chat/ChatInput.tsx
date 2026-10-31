@@ -227,6 +227,13 @@ interface ChatInputProps {
     scrollToBottom?: () => void;
     active?: boolean;
     draftPresentationExiting?: boolean;
+    /**
+     * Surface opt-in for the running-turn elapsed line in the composer
+     * footer (forwarded to `ComposerFooter`). Default OFF; enabled only at
+     * the ChatView mounts the surface owner named (webui MainLayout,
+     * extension VSCodeLayout).
+     */
+    runningElapsedVisible?: boolean;
 }
 
 const resolveChatDraftIdentity = (sessionId: string | null): ChatDraftIdentity | null => {
@@ -245,6 +252,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
     scrollToBottom,
     active = true,
     draftPresentationExiting = false,
+    runningElapsedVisible = false,
 }) => {
     const { t } = useI18n();
     // Track if we restored a draft on mount (for text selection)
@@ -2887,6 +2895,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
                         permissionAutoAcceptEnabled={permissionAutoAcceptEnabled}
                         isPermissionAutoAcceptInteractive={isPermissionAutoAcceptInteractive}
                         dictationActive={mobileShell.dictationActive}
+                        runningElapsedVisible={runningElapsedVisible}
                         onOpenSettings={onOpenSettings}
                         onPickLocalFiles={handlePickLocalFiles}
                         onOpenIssuePicker={openIssuePicker}

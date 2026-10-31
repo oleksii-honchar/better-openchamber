@@ -13,6 +13,13 @@ type ChatViewProps = {
     messagesEnabled?: boolean;
     readOnly?: boolean;
     initialAllowPromptingSubagentSessions?: boolean;
+    /**
+     * Surface opt-in for the composer's running-turn elapsed line, forwarded
+     * through ChatContainer to the composer footer. Default OFF: a surface
+     * renders the line only when its ChatView mount passes `true` (the two
+     * named mounts per A-v9.1 D-5 — webui MainLayout, extension VSCodeLayout).
+     */
+    runningElapsedVisible?: boolean;
 };
 
 export const ChatView: React.FC<ChatViewProps> = ({
@@ -20,6 +27,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
     messagesEnabled,
     readOnly = false,
     initialAllowPromptingSubagentSessions,
+    runningElapsedVisible = false,
 }) => {
     const currentSessionId = useSessionUIStore((state) => state.currentSessionId);
 
@@ -30,6 +38,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 messagesEnabled={messagesEnabled}
                 readOnly={readOnly}
                 initialAllowPromptingSubagentSessions={initialAllowPromptingSubagentSessions}
+                runningElapsedVisible={runningElapsedVisible}
             />
         </ChatErrorBoundary>
     );

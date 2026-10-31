@@ -554,6 +554,12 @@ type ChatContainerProps = {
     autoOpenDraft?: boolean;
     readOnly?: boolean;
     initialAllowPromptingSubagentSessions?: boolean;
+    /**
+     * Surface opt-in forwarded to the composer's footer for the running-turn
+     * elapsed line. Default OFF — a surface must pass `true` explicitly at
+     * its ChatView mount (A-v9.1 D-5); only MainLayout and VSCodeLayout do.
+     */
+    runningElapsedVisible?: boolean;
 };
 
 export const ChatContainer: React.FC<ChatContainerProps> = ({
@@ -562,6 +568,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     autoOpenDraft = true,
     readOnly = false,
     initialAllowPromptingSubagentSessions,
+    runningElapsedVisible = false,
 }) => {
     const messagesEnabled = messagesEnabledProp ?? active;
     const { t } = useI18n();
@@ -1327,6 +1334,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                         active={active}
                         scrollToBottom={scrollToBottomOnSend}
                         draftPresentationExiting={draftPresentationExiting}
+                        runningElapsedVisible={runningElapsedVisible}
                     />
                 )}
             </div>

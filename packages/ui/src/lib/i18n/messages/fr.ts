@@ -1823,6 +1823,7 @@ export const dict = {
   'chat.statusRow.modelStatus': '{model} · {status}',
   'chat.statusRow.summary.activeLeft': '{active} actif · {left} gauche',
   'chat.statusRow.aborted': 'Avorté',
+  'chat.statusRow.runningFor': '🕐 {duration}',
   'chat.revertIndicator.redo': 'Refaire',
   'chat.revertIndicator.redoAria': 'Rétablir : restaurer les messages annulés',
   'chat.revertPopover.title': 'Rétabli',

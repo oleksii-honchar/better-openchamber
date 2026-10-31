@@ -19,6 +19,7 @@ import { Icon } from '@/components/icon/Icon';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { ModelControls } from '../../ModelControls';
+import { ChatTurnElapsedLine } from './ChatTurnElapsedLine';
 import { ComposerActionButtons } from './ComposerActionButtons';
 import { ComposerAttachmentControls } from './ComposerAttachmentControls';
 import { FocusModeButton } from './FocusModeButton';
@@ -50,6 +51,13 @@ export interface ComposerFooterProps {
     permissionAutoAcceptEnabled: boolean;
     isPermissionAutoAcceptInteractive: boolean;
     dictationActive: boolean;
+    /**
+     * Surface opt-in for the running-turn elapsed line (`🕐 47s`) beside the
+     * stop affordance. Default OFF: only the ChatView mounts that pass it
+     * (the webui MainLayout and the extension VSCodeLayout) ever render it.
+     * The line itself appears only while a turn runs with an observed start.
+     */
+    runningElapsedVisible?: boolean;
 
     onOpenSettings?: () => void;
     onPickLocalFiles: () => void;
@@ -90,6 +98,7 @@ export function ComposerFooter(props: ComposerFooterProps) {
         permissionAutoAcceptEnabled,
         isPermissionAutoAcceptInteractive,
         dictationActive,
+        runningElapsedVisible = false,
         onOpenSettings,
         onPickLocalFiles,
         onOpenIssuePicker,
@@ -171,6 +180,9 @@ export function ComposerFooter(props: ComposerFooterProps) {
                                 >
                                     <Icon name="mic" className={cn(iconSizeClass, 'text-current')} />
                                 </button>
+                                {runningElapsedVisible ? (
+                                    <ChatTurnElapsedLine sessionId={currentSessionId} />
+                                ) : null}
                                 <ComposerActionButtons
                                     isMobile={isMobile}
                                     footerIconButtonClass={footerIconButtonClass}
@@ -238,6 +250,9 @@ export function ComposerFooter(props: ComposerFooterProps) {
                             onInsertAndSend={onDictationInsertAndSend}
                             onContentHeightChange={onDictationContentHeightChange}
                         />
+                        {runningElapsedVisible ? (
+                            <ChatTurnElapsedLine sessionId={currentSessionId} />
+                        ) : null}
                         <ComposerActionButtons
                             isMobile={isMobile}
                             footerIconButtonClass={footerIconButtonClass}
