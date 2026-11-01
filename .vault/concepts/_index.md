@@ -2,7 +2,7 @@
 type: index
 title: "Domain Concepts"
 createdAt: "2026-06-12T14:30:00Z"
-updatedAt: "2026-06-12T14:35:00Z"
+updatedAt: "2026-10-31T18:59:10Z"
 tags: []
 ---
 
@@ -23,3 +23,6 @@ Key domain concepts and mental models for understanding the better-openchamber f
 
 ### Media Rendering
 - [[0004-media-posting-pipeline.concept]] — Media posting pipeline: FilePart transport, grant route generalization, VS Code temp-dir grants
+
+### Chat Timing
+- [[0005-session-activity-timing-two-lifetimes.concept]] — One timing owner, settled vs running-only lifetimes, `unknownStarts` provenance gate, never-fabricated-zero

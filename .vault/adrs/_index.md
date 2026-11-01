@@ -2,7 +2,7 @@
 type: index
 title: "Architecture Decision Records"
 createdAt: "2026-06-12T14:30:00Z"
-updatedAt: "2026-08-24T09:10:00Z"
+updatedAt: "2026-10-31T18:59:10Z"
 tags: []
 ---
 
@@ -31,3 +31,4 @@ Architecture decisions for the better-openchamber fork, including forking strate
 - [[0011-generalize-markdown-grant-route.adr.md]] — **ADR-0011 (accepted):** Generalize the markdown grant route instead of a parallel media route
 - [[0012-vscode-temp-dir-media-grant-forwarding.adr.md]] — **ADR-0012 (accepted):** VS Code resolves temp-dir media via forwarded path-bound grants
 - [[0013-shared-media-caps-and-signatures.adr.md]] — **ADR-0013 (accepted):** Shared media size caps + signature sniffing at grant + renderer
+- [[0014-chat-turn-elapsed-line-running-only.adr.md]] — **ADR-0014 (accepted · developed, owner-committed `87eefa6e`, NOT released):** Chat turn-elapsed line via in-owner running-only derivation + `unknownStarts` provenance gate; default-OFF containment (MainLayout/VSCodeLayout only); 11-dict identical-value copy
