@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  OpenChamber log rotation job — bounded growth of the stack's log sets
+  (scripts/logrotate.sh; policy lives in that header, not here).
+
+  EXPAND-AT-INSTALL (same convention as the com.mmm1.icm-sync plist install):
+    sed 's|@@USER_HOME@@|$HOME|g' scripts/com.mmm1.openchamber-logrotate.plist \
+      > ~/Library/LaunchAgents/com.mmm1.openchamber-logrotate.plist
+    plutil -lint ~/Library/LaunchAgents/com.mmm1.openchamber-logrotate.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.mmm1.openchamber-logrotate.plist
+  Expand success check: zero remaining occurrences of @@USER_HOME@@ in the
+  installed file. The repo copy keeps the placeholder — never install the raw file.
+
+  Rotation is copy-and-truncate only: this job NEVER restarts or renames
+  anything, so com.mmm1.openchamber keeps running untouched.
+  Logs go to this job's OWN files, never to service.out.log / service.err.log
+  (it must not pollute the stream it manages).
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.mmm1.openchamber-logrotate</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/bash</string>
+		<string>@@USER_HOME@@/better-openchamber/scripts/logrotate.sh</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StartInterval</key>
+	<integer>3600</integer>
+	<key>ThrottleInterval</key>
+	<integer>30</integer>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<!-- System binaries only (bash, cp, mv, gzip, stat, find, date). No
+		     node, no user tools: deterministic launchd PATH, absolute repo
+		     path above is already expanded at install. -->
+		<key>PATH</key>
+		<string>/usr/bin:/bin:/usr/sbin:/sbin</string>
+	</dict>
+	<key>StandardOutPath</key>
+	<string>@@USER_HOME@@/Library/Logs/OpenChamber/logrotate.launchd.out.log</string>
+	<key>StandardErrorPath</key>
+	<string>@@USER_HOME@@/Library/Logs/OpenChamber/logrotate.launchd.err.log</string>
+</dict>
+</plist>
