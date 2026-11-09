@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # OpenChamber service dispatcher — mmm1 (launchd label: com.mmm1.openchamber)
 #                        and sa54/Termux (no launcher: self-detached + boot hook).
-# Usage: scripts/server.sh --run | --start | --stop | --status
+# Usage: scripts/server.sh --run | --start | --restart | --stop | --status
 #
 # --run    Foreground runtime. This is the launchd entry AND the manual-smoke entry.
 # --start  Idempotently install the LaunchAgent, kickstart it, wait for readiness.
@@ -34,12 +34,13 @@ PLIST_DST="$HOME/Library/LaunchAgents/com.mmm1.openchamber.plist"
 
 usage() {
   cat >&2 <<EOF
-Usage: $(basename "${BASH_SOURCE[0]}") --run | --start | --stop | --status
+Usage: $(basename "${BASH_SOURCE[0]}") --run | --start | --restart | --stop | --status
 
-  --run     Run the OpenChamber server in the foreground (launchd entry / manual smoke)
-  --start   Install and start the '$LABEL' LaunchAgent (idempotent)
-  --stop    Stop and unload the '$LABEL' LaunchAgent
-  --status  Show launchd state and reachability (no secrets printed)
+  --run      Run the OpenChamber server in the foreground (launchd entry / manual smoke)
+  --start    Install and start the '$LABEL' LaunchAgent (idempotent)
+  --restart  Stop then start (picks up installed agents/skills/config changes)
+  --stop     Stop and unload the '$LABEL' LaunchAgent
+  --status   Show launchd state and reachability (no secrets printed)
 EOF
 }
 
@@ -251,9 +252,19 @@ do_status() {
   echo "reachable=$reachable"
 }
 
+# --restart: pure composition of the two existing idempotent verbs — no new
+# mechanism. launchd path: bootout → plist-sync + bootstrap + kickstart -k +
+# <=60 s readiness; termux path: kill -wait → detached spawn + <=60 s readiness.
+do_restart() {
+  echo "restarting $LABEL..."
+  do_stop
+  do_start
+}
+
 case "${1:-}" in
   --run) do_run ;;
   --start) do_start ;;
+  --restart) do_restart ;;
   --stop) do_stop ;;
   --status) do_status ;;
   *)
