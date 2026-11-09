@@ -24,9 +24,12 @@
 #   OC_DATA_LOGDIR   (~/.local/share/opencode/log)  dev.log             copy-truncate
 #                                                     <ISO>.log(.gz)      age policy
 #   copy-truncate: file over MAX_BYTES → drop .3, shift .2→.3 and .1→.2
-#     (gzipping both moved archives), cp current → .1, then truncate current IN
-#     PLACE (`: >` — same inode, the holder's fd stays valid). A failed archive
-#     copy means NO truncate: the live file is never shortened without a copy.
+#     (both moved archives end compressed), cp current → .1 and gzip .1 at
+#     once (retention: .1.gz .2.gz .3.gz — the install acceptance names the
+#     fresh .1.gz, so the newest archive is compressed at creation), then
+#     truncate current IN PLACE (`: >` — same inode, the holder's fd stays
+#     valid). A failed archive copy means NO truncate: the live file is never
+#     shortened without a copy.
 #   age policy (dated files are retired, never truncated): older than KEEP_DAYS
 #     by last-write mtime → gzip (never touching an existing .gz); older than
 #     DELETE_DAYS → delete. mtime (not the ISO name) ages the file: an ISO-named
@@ -76,9 +79,10 @@ log_line() {
 }
 
 # ------------------------------------------------- sets 1+2 and held dev.log
-# rotate_copy_truncate <file> — retention: .1 (fresh plain copy) + .2.gz +
-# .3.gz, nothing older. Card order: drop .3; shift .2→.3, .1→.2 gzipping both
-# moved archives; cp current → .1; ONLY after copy success, `: >` in place.
+# rotate_copy_truncate <file> — retention: .1.gz .2.gz .3.gz, nothing older.
+# Card shift order: drop .3; shift .2→.3, .1→.2 (moved archives must end up
+# compressed); cp current → .1 and gzip it AT ONCE (AC: the fresh archive
+# exists as .1.gz after the cycle); ONLY after copy success, `: >` in place.
 rotate_copy_truncate() {
   local f="$1" size
   [[ -f "$f" ]] || return 0
@@ -99,8 +103,9 @@ rotate_copy_truncate() {
     log_line "ERROR rotate-aborted copy-failed file=$f size=$size (file left intact, no truncate)"
     return 0
   fi
+  gzip -f "$f.1"
   : > "$f"
-  log_line "ROTATED $f size=$size -> $(basename "$f").1 (archives .2 .3 gzipped); truncated in place, inode preserved"
+  log_line "ROTATED $f size=$size -> $(basename "$f").1.gz; truncated in place, inode preserved"
 }
 
 # ------------------------------------------------- set 3: dated-file age policy
@@ -248,7 +253,10 @@ run_self_test() {
   run_cycle
   st_check "$(file_size "$S")" "0" T2a-truncated-to-zero
   st_check "$(stat -f %i "$S")" "$a" T2b-same-inode-survives "a rename happened"
-  st_check "$(file_size "$S.1")" "$b" T2c-archive-has-all-bytes
+  # AC: after a rotation the archive exists as .1.gz (install acceptance names
+  # it) — fresh copy is gzipped at once; retention is .1.gz .2.gz .3.gz.
+  st_check "$(gunzip < "$S.1.gz" | wc -c | tr -d ' ')" "$b" T2c-archive-gz-has-all-bytes
+  st_check "$([[ ! -e "$S.1" ]] && echo gz-only || echo plain-leftover)" "gz-only" T2c2-fresh-archive-compressed
   st_check "$(grep -c " ROTATED .*service\\.err\\.log" "$T_LXD/logrotate.log" || true)" "1" T2d-one-summary-line
 
   # ---- T2e/2f next cycle shifts archives and gzips the moved ones
@@ -257,7 +265,7 @@ run_self_test() {
   run_cycle
   st_check "$(gunzip < "$S.3.gz")" "OLD2" T2e-oldest-shifted-and-gzipped
   st_check "$([[ -f "$S.2.gz" ]] && echo present || echo missing)" "present" T2f-prev-archive-gzipped
-  st_check "$([[ -f "$S.1" && ! -f "$S.1.gz" ]] && echo plain || echo wrong)" "plain" T2g-newest-archive-stays-plain
+  st_check "$([[ -f "$S.1.gz" && ! -e "$S.1" ]] && echo compressed || echo wrong)" "compressed" T2g-newest-archive-compressed
   head -c "$BIG" /dev/zero > "$S"; run_cycle
   head -c "$BIG" /dev/zero > "$S"; run_cycle     # one more shift → retention cap 3+
   st_check "$(find "$T_LXD" -name 'service.err.log.4*' | wc -l | tr -d ' ')" "0" T2h-nothing-beyond-3
@@ -284,7 +292,7 @@ run_self_test() {
   run_cycle
   chmod 755 "$T_CFG"
   st_check "$(file_size "$C")" "$b" T4a-file-unchanged-after-copy-failure
-  st_check "$(find "$T_CFG" -name 'openchamber-3011.log.1' | wc -l | tr -d ' ')" "0" T4b-no-partial-archive
+  st_check "$(find "$T_CFG" -name 'openchamber-3011.log.1*' | wc -l | tr -d ' ')" "0" T4b-no-partial-archive
   st_check "$(grep -c 'ERROR rotate-aborted copy-failed' "$T_LXD/logrotate.log" || true)" "1" T4c-error-logged
   rm -f "$T_CFG"/*
   rm -f "$T_DATA"/dev.log.1* ; : > "$D"; head -c 1024 /dev/zero > "$D"
