@@ -402,6 +402,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
     const setImagePreviewOpen = useUIStore((state) => state.setImagePreviewOpen);
     const inputBarOffset = useUIStore((state) => state.inputBarOffset);
     const persistChatDraft = useUIStore((state) => state.persistChatDraft);
+    const arrowKeyPromptHistoryEnabled = useUIStore((state) => state.arrowKeyPromptHistoryEnabled);
     const inputSpellcheckEnabled = useUIStore((state) => state.inputSpellcheckEnabled);
     const isExpandedInput = useUIStore((state) => state.isExpandedInput);
     const setExpandedInput = useUIStore((state) => state.setExpandedInput);
@@ -1587,8 +1588,8 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
         const isAnyAutocompleteOpen = openAutocomplete !== null;
         const cursorAtStart = composerRef.current?.getSelection().start === 0 && composerRef.current?.getSelection().end === 0;
         const cursorAtEnd = composerRef.current?.getSelection().start === message.length && composerRef.current?.getSelection().end === message.length;
-        const canNavigateHistoryUp = !isAnyAutocompleteOpen && (message.length === 0 || cursorAtStart);
-        const canNavigateHistoryDown = !isAnyAutocompleteOpen && (message.length === 0 || cursorAtEnd);
+        const canNavigateHistoryUp = arrowKeyPromptHistoryEnabled && !isAnyAutocompleteOpen && (message.length === 0 || cursorAtStart);
+        const canNavigateHistoryDown = arrowKeyPromptHistoryEnabled && !isAnyAutocompleteOpen && (message.length === 0 || cursorAtEnd);
 
         // Markdown-aware auto-pairing (source mode), normal input only.
         if (inputMode === 'normal' && !isAnyAutocompleteOpen && !e.metaKey && !e.ctrlKey && !e.altKey) {

@@ -334,6 +334,12 @@ const SETTINGS_SEARCH_ITEMS: readonly SettingsSearchItem[] = [
     keywords: ['draft', 'message'],
   },
   {
+    id: 'chat.arrow-key-prompt-history',
+    page: 'chat',
+    titleKey: 'settings.openchamber.visual.field.arrowKeyPromptHistory',
+    keywords: ['arrow', 'up', 'down', 'history', 'recall', 'prompt history'],
+  },
+  {
     id: 'chat.composer',
     page: 'chat',
     titleKey: 'settings.openchamber.visual.section.composer',

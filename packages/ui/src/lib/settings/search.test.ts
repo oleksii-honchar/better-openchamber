@@ -38,4 +38,26 @@ describe('settings search', () => {
 
     expect(results.some((result) => result.id === 'integrations.third-party.opencode-cursor-oauth')).toBe(true);
   });
+
+  test('finds the arrow-key prompt history setting by "arrow"', () => {
+    const results = buildSettingsSearchResults({
+      query: 'arrow',
+      runtimeCtx,
+      t,
+      getPageTitle: (page) => page,
+    });
+
+    expect(results.some((result) => result.id === 'chat.arrow-key-prompt-history')).toBe(true);
+  });
+
+  test('finds the arrow-key prompt history setting by "history"', () => {
+    const results = buildSettingsSearchResults({
+      query: 'history',
+      runtimeCtx,
+      t,
+      getPageTitle: (page) => page,
+    });
+
+    expect(results.some((result) => result.id === 'chat.arrow-key-prompt-history')).toBe(true);
+  });
 });

@@ -2,7 +2,7 @@
 type: index
 title: "Architecture Decision Records"
 createdAt: "2026-06-12T14:30:00Z"
-updatedAt: "2026-10-31T18:59:10Z"
+updatedAt: "2026-11-14T10:16:56Z"
 tags: []
 ---
 
@@ -32,3 +32,4 @@ Architecture decisions for the better-openchamber fork, including forking strate
 - [[0012-vscode-temp-dir-media-grant-forwarding.adr.md]] — **ADR-0012 (accepted):** VS Code resolves temp-dir media via forwarded path-bound grants
 - [[0013-shared-media-caps-and-signatures.adr.md]] — **ADR-0013 (accepted):** Shared media size caps + signature sniffing at grant + renderer
 - [[0014-chat-turn-elapsed-line-running-only.adr.md]] — **ADR-0014 (accepted · developed, owner-committed `87eefa6e`, NOT released):** Chat turn-elapsed line via in-owner running-only derivation + `unknownStarts` provenance gate; default-OFF containment (MainLayout/VSCodeLayout only); 11-dict identical-value copy
+- [[0015-arrow-key-prompt-history-toggle-default-off.adr.md]] — **ADR-0015 (accepted · developed at `6d5e7b5c`, reviewer-approved, NOT committed):** Fork-local Settings toggle "Recall previous messages with arrow keys" gating the composer prompt-history branches via the `canNavigateHistory*` guards; owner-ruled fork default OFF; zustand partialize persistence (see memory 0008); transcript ArrowUp excluded (upstream #4542, see concept 0006)

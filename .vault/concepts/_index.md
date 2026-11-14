@@ -2,7 +2,7 @@
 type: index
 title: "Domain Concepts"
 createdAt: "2026-06-12T14:30:00Z"
-updatedAt: "2026-10-31T18:59:10Z"
+updatedAt: "2026-11-14T10:16:56Z"
 tags: []
 ---
 
@@ -26,3 +26,6 @@ Key domain concepts and mental models for understanding the better-openchamber f
 
 ### Chat Timing
 - [[0005-session-activity-timing-two-lifetimes.concept]] — One timing owner, settled vs running-only lifetimes, `unknownStarts` provenance gate, never-fabricated-zero
+
+### Chat Input
+- [[0006-chat-arrow-up-two-behaviors.concept]] — Two unrelated ArrowUp behaviors users describe identically: composer prompt-history recall (fork-owned toggle, ADR-0015) vs transcript turn-scroll (upstream #4542); distinguishing test + upstream litigation history

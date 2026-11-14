@@ -4,6 +4,7 @@
 - **Chat: comment on a reply.** Select text in a chat message and choose Comment to attach that quote with your note to the next message; the selection stays highlighted while you type. Add to chat is now Add to input.
 - Diff: hovering a line shows a + button that opens a comment for the line; clicking a line or dragging across lines opens the editor for that range. The comment editor and saved-comment cards match the chat's comment style.
 - Composer: hovering a context chip above the input opens a stacked preview of everything attached, where comments can be edited in place or items removed before sending.
+- Chat: Arrow Up/Down in the composer now move the cursor by default; enable "Recall previous messages with arrow keys" in Settings to restore prompt-history recall.
 - Chat: OpenCode notices now share one style.
 - The timeline dialog now fits small windows instead of squeezing the message list to a couple of rows (thanks to @gaojunran).
 

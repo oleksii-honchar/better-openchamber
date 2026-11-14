@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 - Composer: hovering or tapping a context chip above the input opens a stacked preview of everything attached, where a comment can be edited in place or an item removed before sending.
 - Mobile: the chat comment input overlays the composer exactly and rides the keyboard; Enter makes a new line there, with attach on the button.
 - Desktop: a freshly installed or updated build no longer keeps loading the previous version's interface from cache.
+- Chat: Arrow Up/Down in the composer now move the cursor by default; enable "Recall previous messages with arrow keys" in Settings to restore prompt-history recall.
 - Chat: OpenCode notices now share one style.
 - UI: draft target menus stay inside the chat area instead of overlapping the header.
 - UI: Linear and Cloudflare tools now show their own icons.
