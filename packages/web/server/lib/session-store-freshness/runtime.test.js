@@ -75,8 +75,8 @@ function createTestDeps({ rows = [], watchImpl, fsExtra = {}, hubEventsToDeliver
         }
       },
     },
-    broadcastGlobalUiEvent: (payload) => {
-      emitted.push(payload);
+    emitExternalUpdateEvent: (event) => {
+      emitted.push(event);
     },
     logger: { log: () => {}, warn: () => {}, error: () => {} },
   };
@@ -195,8 +195,7 @@ describe('createSessionStoreFreshnessRuntime', () => {
     expect(base.fetchCalls).toHaveLength(2);
     expect(base.emitted).toHaveLength(1);
     expect(base.emitted[0]).toEqual({
-      type: SESSION_STORE_FRESHNESS_EVENT_TYPE,
-      properties: { sessionID: 's1', directory: '/repo/one', updated: 105, source: 'storage' },
+      sessionID: 's1', directory: '/repo/one', updated: 105, source: 'storage',
     });
 
     // Re-checking the same value stays quiet.
@@ -248,7 +247,7 @@ describe('createSessionStoreFreshnessRuntime', () => {
     base.watcher.emit('change', 'change', 'opencode.db-wal');
     await settle();
     expect(base.emitted).toHaveLength(1);
-    expect(base.emitted[0].properties.sessionID).toBe('s2');
+    expect(base.emitted[0].sessionID).toBe('s2');
 
     runtime.stop();
   });
@@ -307,7 +306,7 @@ describe('createSessionStoreFreshnessRuntime', () => {
     base.watcher.emit('change', 'change', 'opencode.db-wal');
     await settle();
     expect(base.emitted).toHaveLength(1);
-    expect(base.emitted[0].properties.updated).toBe(130);
+    expect(base.emitted[0].updated).toBe(130);
 
     runtime.stop();
   });
@@ -428,7 +427,7 @@ describe('comprehensive list transport (261117 deviation fix)', () => {
     base.watcher.emit('change', 'change', 'opencode-patched-dev2.db-wal');
     await settle();
     expect(base.emitted).toHaveLength(1);
-    expect(base.emitted[0].properties.sessionID).toBe('t1');
+    expect(base.emitted[0].sessionID).toBe('t1');
   });
 
   it('stops paging when ids repeat across pages (cursor loop guard)', async () => {

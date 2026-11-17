@@ -74,7 +74,7 @@ import { createBootstrapRuntime } from './lib/opencode/bootstrap-runtime.js';
 import { createSessionRuntime } from './lib/opencode/session-runtime.js';
 import { configureOpenCodeRuntimeProviders, resetOpenCodeRuntimeProviders } from './lib/small-model/runtime-providers.js';
 import { createOpenCodeWatcherRuntime } from './lib/opencode/watcher.js';
-import { createSessionStoreFreshnessRuntime } from './lib/session-store-freshness/runtime.js';
+import { createSessionStoreFreshnessRuntime, SESSION_STORE_FRESHNESS_EVENT_TYPE } from './lib/session-store-freshness/runtime.js';
 import { createSessionAssistRuntime } from './lib/session-assist/runtime.js';
 import { createSessionGoalRuntime } from './lib/session-goal/runtime.js';
 import { createContextObligatoryRuntime } from './lib/context-obligatory/runtime.js';
@@ -903,7 +903,7 @@ const sessionStoreFreshnessRuntime = ENV_DISABLE_SESSION_STORE_FRESHNESS
       buildOpenCodeUrl,
       getOpenCodeAuthHeaders,
       globalEventHub: globalMessageStreamHub,
-      broadcastGlobalUiEvent,
+      emitExternalUpdateEvent: (event) => emitSessionExternalUpdateEvent(event),
     });
 
 // Session-assist subscribes to the hub directly: it needs the envelope's
@@ -1324,6 +1324,31 @@ const emitAgentMemoryChangedEvent = (event) => {
         properties: {
           scope: event.scope,
           ...(event.projectId ? { projectId: event.projectId } : {}),
+        },
+      });
+    } catch {
+      uiOpenChamberEventClients.delete(client);
+    }
+  }
+};
+/**
+ * Tells open panels that the SESSION STORE moved under them without any event
+ * from this server's engine — another process wrote the shared database. The
+ * payload carries identity only; every consumer re-reads authoritatively
+ * (sync-context's `resyncSessionAfterExternalUpdate`). Same browser-pool
+ * pattern as the agent-memory signal above; the desktop-notification pool is
+ * not an openchamber envelope consumer.
+ */
+const emitSessionExternalUpdateEvent = (event) => {
+  for (const client of uiOpenChamberEventClients) {
+    try {
+      writeSseEvent(client, {
+        type: SESSION_STORE_FRESHNESS_EVENT_TYPE,
+        properties: {
+          sessionID: event.sessionID,
+          directory: event.directory,
+          updated: event.updated,
+          source: event.source,
         },
       });
     } catch {

@@ -109,7 +109,7 @@ export function createSessionStoreFreshnessRuntime(deps = {}) {
     buildOpenCodeUrl,
     getOpenCodeAuthHeaders = () => ({}),
     globalEventHub = null,
-    broadcastGlobalUiEvent,
+    emitExternalUpdateEvent = () => {},
     debounceMs = DEFAULT_SESSION_STORE_DEBOUNCE_MS,
     pollIntervalMs = DEFAULT_SESSION_STORE_POLL_INTERVAL_MS,
     setTimeoutImpl = (fn, ms) => globalThis.setTimeout(fn, ms),
@@ -272,14 +272,13 @@ export function createSessionStoreFreshnessRuntime(deps = {}) {
       }
 
       for (const change of changes) {
-        broadcastGlobalUiEvent({
-          type: SESSION_STORE_FRESHNESS_EVENT_TYPE,
-          properties: {
-            sessionID: change.sessionID,
-            directory: change.directory,
-            updated: change.updated,
-            source: 'storage',
-          },
+        // Identity-only signal; the browser pool fan-out (index) wraps it in
+        // the openchamber: envelope the page's parser expects.
+        emitExternalUpdateEvent({
+          sessionID: change.sessionID,
+          directory: change.directory,
+          updated: change.updated,
+          source: 'storage',
         });
       }
       if (changes.length > 0) {

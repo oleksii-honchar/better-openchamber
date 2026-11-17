@@ -22,10 +22,17 @@ over HTTP, which does read the shared storage).
 - `createSessionStoreFreshnessRuntime(deps)`: creates the watcher runtime.
   Deps (all injectable for tests): `getStorageDir`, `fsImpl`, `fetchImpl`,
   `buildOpenCodeUrl`, `getOpenCodeAuthHeaders`, `globalEventHub`,
-  `broadcastGlobalUiEvent`, `debounceMs` (default 500),
+  `emitExternalUpdateEvent`, `debounceMs` (default 500),
   `pollIntervalMs` (default 2000), timer impls, `logger`.
   Returns `{ start, stop }`.
-- `SESSION_STORE_FRESHNESS_EVENT_TYPE`: `openchamber:session-external-update`.
+- `SESSION_STORE_FRESHNESS_EVENT_TYPE`: `openchamber:session-external-update`
+  — the wire envelope name. The module itself calls
+  `emitExternalUpdateEvent({ sessionID, directory, updated, source })` with a
+  FLAT identity payload; index.js `emitSessionExternalUpdateEvent` wraps it
+  into the envelope and fans it out to the browser `openchamber:*` client pool
+  (`/api/openchamber/events`), mirroring `emitAgentMemoryChangedEvent`.
+  (This is deliberately NOT `broadcastGlobalUiEvent` — the desktop-notification
+  pool does not consume openchamber envelopes; proved by live test 261117.)
 - `resolveOpencodeStorageDir(env)`: `(XDG_DATA_HOME || ~/.local/share)/opencode`
   (same resolution the Git worktree module already uses).
 - `isSessionStoreFile(filename)`: `.db` / `.db-wal` / `.db-shm` matcher —
