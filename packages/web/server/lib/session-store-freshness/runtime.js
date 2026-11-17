@@ -25,6 +25,10 @@ export const DEFAULT_SESSION_STORE_POLL_INTERVAL_MS = 2000;
 // SQLite main files and their WAL sidecars — the only store writes that can
 // carry session changes. Host/version-tolerant: never a fixed file name.
 const SESSION_STORE_FILE_PATTERN = /\.db(?:-(?:wal|shm))?$/;
+// Comprehensive-list paging (mirrors the client sidebar loader): page size
+// and a hard page cap so a pathological cursor can never spin the watcher.
+const SESSION_PAGE_SIZE = 200;
+const MAX_SESSION_PAGES = 10;
 
 const isFiniteNumber = (value) => typeof value === 'number' && Number.isFinite(value);
 
@@ -175,17 +179,76 @@ export function createSessionStoreFreshnessRuntime(deps = {}) {
   };
 
   // ── Store check through the served engine's own read path ─────────────
+  // NOT plain `/session`: on a multi-project engine that route scopes to the
+  // engine's default worktree and silently omits foreign projects (proved on
+  // mmm1: 10 rows returned, the external session among 44 was invisible).
+  // This is the same comprehensive read the app's own sidebar loader uses —
+  // `experimental.session.list` (stores/globalSessions.ts): unscoped = all
+  // projects, `archived=true` = inclusive so restored rows still diff, and
+  // cursor semantics = "strictly before this updated timestamp" with the
+  // `x-next-cursor` header preferred and the page's last `time.updated`
+  // as fallback. Same stop guards as the client implementation.
   const fetchSessionRows = async () => {
-    const url = buildOpenCodeUrl('/session', '');
-    const response = await fetchImpl(url, { headers: { ...getOpenCodeAuthHeaders() } });
-    if (!response || !response.ok) {
-      throw new Error(`session list responded ${response ? response.status : 'unreachable'}`);
+    const headers = { ...getOpenCodeAuthHeaders() };
+    const rows = [];
+    const seen = new Set();
+    let cursor;
+    for (let page = 0; page < MAX_SESSION_PAGES; page += 1) {
+      const params = new URLSearchParams({ archived: 'true', limit: String(SESSION_PAGE_SIZE) });
+      if (cursor !== undefined) {
+        params.set('cursor', String(cursor));
+      }
+      const url = buildOpenCodeUrl(`/experimental/session?${params.toString()}`, '');
+      const response = await fetchImpl(url, { headers });
+      if (!response || !response.ok) {
+        throw new Error(`session list responded ${response ? response.status : 'unreachable'}`);
+      }
+      const body = await response.json();
+      const payload = Array.isArray(body)
+        ? body
+        : body && Array.isArray(body.data) ? body.data : null;
+      if (!payload) {
+        throw new Error('session list was not an array');
+      }
+      let added = 0;
+      for (const item of payload) {
+        const id = item && typeof item.id === 'string' ? item.id : '';
+        if (!id || seen.has(id)) {
+          continue;
+        }
+        seen.add(id);
+        rows.push(item);
+        added += 1;
+      }
+      if (payload.length < SESSION_PAGE_SIZE) {
+        break;
+      }
+      let headerCursor = Number.NaN;
+      try {
+        headerCursor = Number(response.headers && response.headers.get
+          ? response.headers.get('x-next-cursor')
+          : NaN);
+      } catch {
+        headerCursor = Number.NaN;
+      }
+      const lastUpdated = payload[payload.length - 1] && payload[payload.length - 1].time
+        ? payload[payload.length - 1].time.updated
+        : undefined;
+      const nextCursor = isFiniteNumber(headerCursor)
+        ? headerCursor
+        : isFiniteNumber(lastUpdated) ? lastUpdated : undefined;
+      if (nextCursor === undefined) {
+        break;
+      }
+      if (cursor !== undefined && nextCursor >= cursor) {
+        break;
+      }
+      if (added === 0) {
+        break;
+      }
+      cursor = nextCursor;
     }
-    const body = await response.json();
-    if (!Array.isArray(body)) {
-      throw new Error('session list was not an array');
-    }
-    return collectSessionRows(body);
+    return collectSessionRows(rows);
   };
 
   const runCheck = async () => {

@@ -385,3 +385,65 @@ describe('createSessionStoreFreshnessRuntime', () => {
     runtime.stop();
   });
 });
+
+describe('comprehensive list transport (261117 deviation fix)', () => {
+  it('queries the experimental endpoint with inclusive flags, not the worktree-scoped /session', async () => {
+    const base = createTestDeps({ rows: [aRow('s1', 100)] });
+    const runtime = createSessionStoreFreshnessRuntime(base.deps);
+    runtime.start();
+    await settle();
+
+    expect(base.fetchCalls.length).toBeGreaterThanOrEqual(1);
+    const url = base.fetchCalls[0].url;
+    expect(url).toContain('/experimental/session');
+    expect(url).toContain('archived=true');
+    expect(url).toContain('limit=200');
+    expect(new URL(url).pathname).toBe('/experimental/session');
+    // Auth is carried on every list read.
+    expect(base.fetchCalls[0].options.headers.authorization).toBe('Basic test');
+  });
+
+  it('follows the updated-cursor until a partial page and stops', async () => {
+    const pageSize = 200;
+    const bigPage = [];
+    for (let i = 0; i < pageSize; i += 1) {
+      bigPage.push(aRow(`p${i}`, 900000 - i));
+    }
+    const lastTime = 900000 - (pageSize - 1);
+    const tailPage = [aRow('t1', lastTime - 5), aRow('t2', lastTime - 9)];
+
+    const base = createTestDeps();
+    base.listQueue.push(bigPage, tailPage);
+    const runtime = createSessionStoreFreshnessRuntime(base.deps);
+    runtime.start();
+    await settle();
+
+    // Exactly two pages: partial second page stops the loop.
+    expect(base.fetchCalls).toHaveLength(2);
+    expect(base.fetchCalls[0].url).not.toContain('cursor=');
+    expect(base.fetchCalls[1].url).toContain(`cursor=${lastTime}`);
+    // The seeded rows from BOTH pages are known afterwards — a bump on a
+    // page-2 session emits, proving the second page really fed the watermarks.
+    base.listQueue.push([...bigPage, aRow('t1', lastTime + 500), aRow('t2', lastTime - 9)]);
+    base.watcher.emit('change', 'change', 'opencode-patched-dev2.db-wal');
+    await settle();
+    expect(base.emitted).toHaveLength(1);
+    expect(base.emitted[0].properties.sessionID).toBe('t1');
+  });
+
+  it('stops paging when ids repeat across pages (cursor loop guard)', async () => {
+    const pageSize = 200;
+    const pageA = [];
+    for (let i = 0; i < pageSize; i += 1) {
+      pageA.push(aRow(`d${i}`, 500000 - i));
+    }
+    const oldest = 500000 - (pageSize - 1);
+    const base = createTestDeps();
+    base.listQueue.push(pageA, [...pageA].map((r) => ({ ...r })));
+    const runtime = createSessionStoreFreshnessRuntime(base.deps);
+    runtime.start();
+    await settle();
+    // Second page added nothing new → stop before a third request.
+    expect(base.fetchCalls).toHaveLength(2);
+  });
+});
