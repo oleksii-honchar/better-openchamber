@@ -135,6 +135,7 @@ export function createSessionStoreFreshnessRuntime(deps = {}) {
   let running = false;
   let rerunRequested = false;
   let everSucceeded = false;
+  let baselineLogged = false;
   let watcher = null;
   let pollTimer = null;
   let lastPollFingerprint = null;
@@ -265,6 +266,10 @@ export function createSessionStoreFreshnessRuntime(deps = {}) {
         watermarks.set(id, value);
       }
       everSucceeded = true;
+      if (!baselineLogged) {
+        baselineLogged = true;
+        log('log', `[session-store-freshness] baseline seeded: ${rows.length} session rows tracked`);
+      }
 
       for (const change of changes) {
         broadcastGlobalUiEvent({
@@ -419,6 +424,7 @@ export function createSessionStoreFreshnessRuntime(deps = {}) {
   const start = () => {
     if (startedFlag) return;
     startedFlag = true;
+    log('log', '[session-store-freshness] started (storage watch + baseline check active)');
 
     if (globalEventHub && typeof globalEventHub.subscribeEvent === 'function') {
       unsubscribeHub = globalEventHub.subscribeEvent(onHubEvent);
