@@ -72,4 +72,50 @@ describe('openchamber events', () => {
     ]);
     unsubscribe();
   });
+
+  test('dispatches external session-store updates and drops malformed ones', async () => {
+    const { subscribeOpenchamberEvents } = await import('./openchamberEvents');
+    const events: unknown[] = [];
+    const unsubscribe = subscribeOpenchamberEvents((event) => events.push(event));
+    const source = MockEventSource.instances[0];
+
+    source.onmessage?.({
+      data: JSON.stringify({
+        type: 'openchamber:session-external-update',
+        properties: {
+          sessionID: 'ses_ext',
+          directory: '/repo/served',
+          updated: 999,
+          source: 'storage',
+        },
+      }),
+    });
+    // sessionId (lowercase) is tolerated too — the server may emit either casing.
+    source.onmessage?.({
+      data: JSON.stringify({
+        type: 'openchamber:session-external-update',
+        properties: { sessionId: 'ses_ext2', directory: '/repo/served' },
+      }),
+    });
+    // Malformed: missing directory → dropped.
+    source.onmessage?.({
+      data: JSON.stringify({
+        type: 'openchamber:session-external-update',
+        properties: { sessionID: 'ses_ext3' },
+      }),
+    });
+    // Malformed: missing session → dropped.
+    source.onmessage?.({
+      data: JSON.stringify({
+        type: 'openchamber:session-external-update',
+        properties: { directory: '/repo/served' },
+      }),
+    });
+
+    expect(events).toEqual([
+      { type: 'session-external-update', sessionID: 'ses_ext', directory: '/repo/served' },
+      { type: 'session-external-update', sessionID: 'ses_ext2', directory: '/repo/served' },
+    ]);
+    unsubscribe();
+  });
 });

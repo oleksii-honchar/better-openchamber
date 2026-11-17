@@ -168,6 +168,8 @@ export type SessionMaterializationReason =
   | "stream-reconnect"
   | "transport-switch"
   | "stale-status-resync"
+  | "external-store-update"
+  | "focus-refetch"
   | "settled-running-tool"
 
 export type DirectoryEventResult = boolean | {

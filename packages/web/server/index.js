@@ -74,6 +74,7 @@ import { createBootstrapRuntime } from './lib/opencode/bootstrap-runtime.js';
 import { createSessionRuntime } from './lib/opencode/session-runtime.js';
 import { configureOpenCodeRuntimeProviders, resetOpenCodeRuntimeProviders } from './lib/small-model/runtime-providers.js';
 import { createOpenCodeWatcherRuntime } from './lib/opencode/watcher.js';
+import { createSessionStoreFreshnessRuntime } from './lib/session-store-freshness/runtime.js';
 import { createSessionAssistRuntime } from './lib/session-assist/runtime.js';
 import { createSessionGoalRuntime } from './lib/session-goal/runtime.js';
 import { createContextObligatoryRuntime } from './lib/context-obligatory/runtime.js';
@@ -611,6 +612,8 @@ const {
 
 const ENV_SKIP_OPENCODE_START = process.env.OPENCODE_SKIP_START === 'true' ||
                                     process.env.OPENCHAMBER_SKIP_OPENCODE_START === 'true';
+const ENV_DISABLE_SESSION_STORE_FRESHNESS = process.env.OPENCHAMBER_DISABLE_SESSION_STORE_FRESHNESS === '1' ||
+                                    process.env.OPENCHAMBER_DISABLE_SESSION_STORE_FRESHNESS === 'true';
 const ENV_DESKTOP_NOTIFY = (() => {
   if (process.env.OPENCHAMBER_DESKTOP_NOTIFY === 'true') {
     return true;
@@ -887,6 +890,21 @@ const openCodeWatcherRuntime = createOpenCodeWatcherRuntime({
     sessionRuntime.processOpenCodeSsePayload(payload);
   },
 });
+
+// External-writer visibility: another OpenCode process can write the SAME
+// session store while emitting only on its own event bus. Watch the store;
+// when the engine's own list view shows a session move this server did not
+// announce itself, tell clients to re-read it. Loop-guarded internally: a
+// value our own stream already carried is never re-announced.
+// Docs: lib/session-store-freshness/DOCUMENTATION.md
+const sessionStoreFreshnessRuntime = ENV_DISABLE_SESSION_STORE_FRESHNESS
+  ? null
+  : createSessionStoreFreshnessRuntime({
+      buildOpenCodeUrl,
+      getOpenCodeAuthHeaders,
+      globalEventHub: globalMessageStreamHub,
+      broadcastGlobalUiEvent,
+    });
 
 // Session-assist subscribes to the hub directly: it needs the envelope's
 // directory to route its own OpenCode calls to the right instance.
@@ -1402,6 +1420,13 @@ const bootstrapOpenCodeAtStartup = async (...args) => {
   void ensureGlobalWatcherStarted().catch((error) => {
     console.warn(`Global event watcher startup failed: ${error?.message || error}`);
   });
+  if (sessionStoreFreshnessRuntime) {
+    try {
+      sessionStoreFreshnessRuntime.start();
+    } catch (error) {
+      console.warn(`Session-store freshness watcher failed to start: ${error?.message || error}`);
+    }
+  }
 };
 const killProcessOnPort = (...args) => openCodeLifecycleRuntime.killProcessOnPort(...args);
 const waitForPortRelease = (...args) => openCodeLifecycleRuntime.waitForPortRelease(...args);
@@ -1420,6 +1445,7 @@ const gracefulShutdownRuntime = createGracefulShutdownRuntime({
   },
   syncToHmrState,
   openCodeWatcherRuntime,
+  sessionStoreFreshnessRuntime,
   sessionAssistRuntime,
   sessionGoalRuntime,
   contextObligatoryRuntime,

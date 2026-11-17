@@ -42,11 +42,25 @@ type AgentMemoryChangedEvent = {
   projectId?: string;
 };
 
+/**
+ * Another OpenCode process wrote a session this deployment also serves, so
+ * that session's own event stream stayed silent and the page can be stale.
+ * Like `agent-memory-changed`, it carries only which session moved (and in
+ * which directory), never the content: the listener re-reads from the server,
+ * so a late-arriving event can't overwrite fresh state with a stale payload.
+ */
+type SessionExternalUpdateEvent = {
+  type: 'session-external-update';
+  sessionID: string;
+  directory: string;
+};
+
 type OpenChamberEvent =
   | ScheduledTaskRanEvent
   | SessionCreatedEvent
   | BrowserControlRequestEvent
-  | AgentMemoryChangedEvent;
+  | AgentMemoryChangedEvent
+  | SessionExternalUpdateEvent;
 type Listener = (event: OpenChamberEvent) => void;
 
 let eventSource: EventSource | null = null;
@@ -143,6 +157,25 @@ const dispatchFromEnvelope = (envelope: { type: string; properties: unknown }) =
         ? { projectId: properties.projectId }
         : {}),
     };
+    for (const listener of listeners) {
+      listener(nextEvent);
+    }
+    return;
+  }
+
+  if (envelope.type === 'openchamber:session-external-update') {
+    const properties = getEventProperties(envelope.properties);
+    const sessionID = typeof properties?.sessionID === 'string' && properties.sessionID.length > 0
+      ? properties.sessionID
+      : typeof properties?.sessionId === 'string' && properties.sessionId.length > 0
+        ? properties.sessionId
+        : '';
+    const directory = typeof properties?.directory === 'string' ? properties.directory : '';
+    if (!sessionID || !directory) {
+      return;
+    }
+
+    const nextEvent: SessionExternalUpdateEvent = { type: 'session-external-update', sessionID, directory };
     for (const listener of listeners) {
       listener(nextEvent);
     }

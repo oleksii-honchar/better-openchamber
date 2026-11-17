@@ -38,6 +38,7 @@ import { setSyncRefs, getAllSyncSessions } from "./sync-refs"
 import { useSessionUIStore } from "./session-ui-store"
 import { stripSessionDiffSnapshots } from "./sanitize"
 import { applySessionEventToGlobalSessions } from "./session-event-router"
+import { subscribeOpenchamberEvents } from "@/lib/openchamberEvents"
 import { syncDebug } from "./debug"
 import { getReconnectCandidateSessionIds, mergeBootstrapSessions } from "./reconnect-recovery"
 import { messagesBefore } from "./message-ordering"
@@ -1379,6 +1380,95 @@ export async function resyncBlockingRequestsForActiveDirectory(
   await resyncBlockingRequestsForDirectory(directory, store)
 }
 
+/**
+ * Authoritative single-session repair: re-read the session header and message
+ * tail through the same paths a reconnect resync uses. Returns the merged
+ * session when the header fetch succeeded, else null. Shared by the directory
+ * resync loop and the external-store signal so there is one repair recipe.
+ */
+async function authoritativeResyncKnownSession(
+  directory: string,
+  store: StoreApi<DirectoryStore>,
+  routingIndex: EventRoutingIndex,
+  scopedClient: ReturnType<typeof opencodeClient.getScopedSdkClient>,
+  sessionId: string,
+  reason: SessionMaterializationReason,
+): Promise<Session | null> {
+  syncDebug.recovery.materializing({ reason, directory, sessionID: sessionId })
+  const loader = getImperativeSessionMessageLoader()
+  const [sessionResponse] = await Promise.all([
+    retry(async () => {
+      const response = await scopedClient.session.get({ sessionID: sessionId })
+      assertSdkSuccess(response, "session.get")
+      return response
+    }).catch(() => null),
+    loader?.refreshTail({ directory, sessionID: sessionId }, RECONNECT_MESSAGE_LIMIT) ?? Promise.resolve(),
+  ])
+  const session = sessionResponse?.data
+  if (!session) return null
+
+  const nextSession = stripSessionDiffSnapshots(session)
+  store.setState((state: DirectoryStore) => {
+    const sessionIndex = state.session.findIndex((item) => item.id === nextSession.id)
+    let sessions = state.session
+    let sessionChanged = false
+    let sessionTotal = state.sessionTotal
+
+    if (sessionIndex >= 0) {
+      if (!haveEquivalentSyncSnapshots(sessions[sessionIndex], nextSession)) {
+        sessions = [...state.session]
+        sessions[sessionIndex] = nextSession
+        sessionChanged = true
+      }
+    } else {
+      sessions = [...state.session]
+      sessions.push(nextSession)
+      sessions.sort((a, b) => cmp(a.id, b.id))
+      if (!nextSession.parentID) sessionTotal += 1
+      sessionChanged = true
+    }
+
+    if (!sessionChanged) {
+      return state
+    }
+
+    return {
+      session: sessions,
+      sessionTotal,
+    }
+  })
+
+  setIndexedSessionDirectory(routingIndex, nextSession.id, directory)
+  setIndexedSessionMessages(routingIndex, sessionId, directory, store.getState().message[sessionId] ?? [])
+
+  return nextSession
+}
+
+/**
+ * One known session was written by ANOTHER OpenCode process, so our event
+ * stream stayed silent and the page can be stale. The store-freshness signal
+ * carried only the identity; this is the re-read: authoritative statuses,
+ * header and message tail through the same repair recipe a reconnect uses,
+ * then the fresh Session through the protected global-sessions router as a
+ * genuine `session.updated` — so sidebar recency updates via the existing
+ * consumer. Provenance lives on the signal only, never in stored data.
+ * Exported for direct testing (the provider wires it to the signal).
+ */
+export async function resyncSessionAfterExternalStoreUpdate(
+  directory: string,
+  store: StoreApi<DirectoryStore>,
+  routingIndex: EventRoutingIndex,
+  sessionID: string,
+): Promise<void> {
+  await resyncDirectorySessionStatuses(directory, store, [sessionID], "authoritative")
+  const scopedClient = opencodeClient.getScopedSdkClient(directory)
+  const nextSession = await authoritativeResyncKnownSession(
+    directory, store, routingIndex, scopedClient, sessionID, "external-store-update")
+  if (nextSession) {
+    applySessionEventToGlobalSessions({ type: "session.updated", properties: { info: nextSession } } as unknown as Event)
+  }
+}
+
 async function resyncDirectoryAfterReconnect(
   directory: string,
   store: StoreApi<DirectoryStore>,
@@ -1393,52 +1483,7 @@ async function resyncDirectoryAfterReconnect(
 
   const scopedClient = opencodeClient.getScopedSdkClient(directory)
   await Promise.all(candidateSessionIds.map(async (sessionId) => {
-    syncDebug.recovery.materializing({ reason, directory, sessionID: sessionId })
-    const loader = getImperativeSessionMessageLoader()
-    const [sessionResponse] = await Promise.all([
-      retry(async () => {
-        const response = await scopedClient.session.get({ sessionID: sessionId })
-        assertSdkSuccess(response, "session.get")
-        return response
-      }).catch(() => null),
-      loader?.refreshTail({ directory, sessionID: sessionId }, RECONNECT_MESSAGE_LIMIT) ?? Promise.resolve(),
-    ])
-    const session = sessionResponse?.data
-    if (!session) return
-
-    const nextSession = stripSessionDiffSnapshots(session)
-    store.setState((state: DirectoryStore) => {
-      const sessionIndex = state.session.findIndex((item) => item.id === nextSession.id)
-      let sessions = state.session
-      let sessionChanged = false
-      let sessionTotal = state.sessionTotal
-
-      if (sessionIndex >= 0) {
-        if (!haveEquivalentSyncSnapshots(sessions[sessionIndex], nextSession)) {
-          sessions = [...state.session]
-          sessions[sessionIndex] = nextSession
-          sessionChanged = true
-        }
-      } else {
-        sessions = [...state.session]
-        sessions.push(nextSession)
-        sessions.sort((a, b) => cmp(a.id, b.id))
-        if (!nextSession.parentID) sessionTotal += 1
-        sessionChanged = true
-      }
-
-      if (!sessionChanged) {
-        return state
-      }
-
-      return {
-        session: sessions,
-        sessionTotal,
-      }
-    })
-
-    setIndexedSessionDirectory(routingIndex, nextSession.id, directory)
-    setIndexedSessionMessages(routingIndex, sessionId, directory, store.getState().message[sessionId] ?? [])
+    await authoritativeResyncKnownSession(directory, store, routingIndex, scopedClient, sessionId, reason)
   }))
 
   await resyncBlockingRequestsForDirectory(directory, store, candidateSessionIds)
@@ -2069,6 +2114,27 @@ export function SyncProvider(props: {
     window.addEventListener("openchamber:system-resume", onSystemResume)
     return () => window.removeEventListener("openchamber:system-resume", onSystemResume)
   }, [childStores])
+
+  // External-writer freshness: the store watcher on the server signals
+  // sessions another OpenCode process moved. Re-read only sessions this UI
+  // already tracks in that directory's store — a session of a directory this
+  // surface never served (or an unknown/new one) is ignored here, matching
+  // the server-side scoping. The re-read is the established single-session
+  // repair; idempotent and coalescing by construction.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    return subscribeOpenchamberEvents((event) => {
+      if (event.type !== "session-external-update") return
+      const store = childStores.children.get(event.directory)
+      if (!store) return
+      if (!store.getState().session.some((session) => session.id === event.sessionID)) return
+      void resyncSessionAfterExternalStoreUpdate(event.directory, store, routingIndex, event.sessionID)
+        .catch(() => {
+          // Transient failure — the next signal, a watchdog pass, or a reload
+          // catches up, same policy as the reconnect resync.
+        })
+    })
+  }, [childStores, routingIndex])
 
   // Configure child store manager
   useEffect(() => {
